@@ -1,4 +1,5 @@
 # ==================================================
+#   LEGACY.
 #  COMBINED MONOLITH SOURCE FILE
 #  Auto-generated — DO NOT EDIT DIRECTLY
 # ==================================================
@@ -2005,4 +2006,5 @@ class PageSettings(QWidget):
     def set_loading_state(self, is_loading):
         self.btn_load.setEnabled(not is_loading)
         if is_loading: self.btn_load.setText("PROCESSING...")
+
         else: self.btn_load.setText("UNLOAD MODEL" if self.state.model_loaded else "LOAD MODEL")
