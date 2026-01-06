@@ -33,30 +33,31 @@ class MonoGuard(QObject):
     def slot_load_model(self):
         if self.state.status in (SystemStatus.RUNNING, SystemStatus.LOADING):
             self._pending = ("load_model", (), {})
-            self._interrupt_current()
+            self._request_stop(clear_pending=False)
             return
         self.engine.load_model()
 
     def slot_unload_model(self):
         if self.state.status in (SystemStatus.RUNNING, SystemStatus.LOADING):
             self._pending = ("unload_model", (), {})
-            self._interrupt_current()
+            self._request_stop(clear_pending=False)
             return
         self.engine.unload_model()
 
     def slot_generate(self, user_input: str):
         if self.state.status in (SystemStatus.RUNNING, SystemStatus.LOADING):
             self._pending = ("generate", (user_input,), {})
-            self._interrupt_current()
+            self._request_stop(clear_pending=False)
             return
         self.engine.generate(user_input)
 
     def slot_stop(self):
-        self._pending = None
-        self.engine.stop_generation()
+        self._request_stop(clear_pending=True)
 
-    def _interrupt_current(self):
-        """Interrupt current execution WITHOUT clearing pending command."""
+    def _request_stop(self, clear_pending: bool) -> None:
+        """Interrupt current execution and optionally clear pending command."""
+        if clear_pending:
+            self._pending = None
         self.engine.stop_generation()
 
     # -------------------------------
