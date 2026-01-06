@@ -85,10 +85,6 @@ class MonolithUI(QMainWindow):
         # --- PAGE STACK ---
         self.stack = QStackedLayout()
         self.host: Optional[AddonHost] = None
-        self.page_chat = None
-        self.page_files = None
-        self.page_addons = None
-        self.page_settings = None
 
         self.center_vbox = QVBoxLayout()
         self.center_vbox.addLayout(self.stack)
@@ -98,15 +94,15 @@ class MonolithUI(QMainWindow):
 
     def attach_host(self, host: AddonHost) -> None:
         self.host = host
-        self.page_chat = host.mount_page("terminal")
-        self.page_files = host.mount_page("databank")
-        self.page_addons = host.mount_page("addons")
-        self.page_settings = host.mount_page("settings")
+        terminal = host.mount_page("terminal")
+        databank = host.mount_page("databank")
+        addons = host.mount_page("addons")
+        settings = host.mount_page("settings")
 
-        self.stack.addWidget(self.page_chat)
-        self.stack.addWidget(self.page_files)
-        self.stack.addWidget(self.page_addons)
-        self.stack.addWidget(self.page_settings)
+        self.stack.addWidget(terminal)
+        self.stack.addWidget(databank)
+        self.stack.addWidget(addons)
+        self.stack.addWidget(settings)
 
         self.set_page(0)
 
@@ -170,7 +166,10 @@ class MonolithUI(QMainWindow):
         self.lbl_status.setText(status.value if hasattr(status, "value") else str(status))
 
         # Pass loading state to settings page to lock buttons
-        self.page_settings.set_loading_state(status == SystemStatus.LOADING or status == SystemStatus.RUNNING)
+        assert self.host is not None, "MonolithUI.update_status called before attach_host"
+        settings = self.host.get_page_widget("settings")
+        if settings and hasattr(settings, "set_loading_state"):
+            settings.set_loading_state(status == SystemStatus.LOADING or status == SystemStatus.RUNNING)
 
     def update_ctx(self, used):
         self.state.ctx_used = used
