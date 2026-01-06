@@ -108,8 +108,6 @@ class MonolithUI(QMainWindow):
         self.stack.addWidget(self.page_addons)
         self.stack.addWidget(self.page_settings)
 
-        self.page_addons.sig_launch_addon.connect(self.launch_addon)
-
         self.set_page(0)
 
     # ---------------- WINDOW BEHAVIOR ----------------
@@ -128,11 +126,6 @@ class MonolithUI(QMainWindow):
         self._drag_pos = None
 
     # ---------------- MODULE SYSTEM ----------------
-
-    def launch_addon(self, addon_type: str):
-        if not self.host:
-            return
-        self.host.launch_module(addon_type)
 
     def close_module(self, mod_id):
         target_w = None
