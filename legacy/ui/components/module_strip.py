@@ -2,8 +2,8 @@ import math
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QScrollArea, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QEvent
-from PySide6.QtGui import QPainter, QColor, QPen, QPolygonF, QDrag, QMimeData
+from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QEvent, QMimeData
+from PySide6.QtGui import QPainter, QColor, QPen, QPolygonF, QDrag
 
 from core.style import ACCENT_GOLD
 from .atoms import SidebarButton
