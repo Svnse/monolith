@@ -4,7 +4,7 @@ from core.state import SystemStatus
 from engine.base import EnginePort
 
 
-class EngineBridge(QObject, EnginePort):
+class EngineBridge(QObject):
     sig_token = Signal(str)
     sig_trace = Signal(str)
     sig_status = Signal(SystemStatus)
