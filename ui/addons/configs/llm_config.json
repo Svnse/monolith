@@ -1,0 +1,9 @@
+{
+  "gguf_path": null,
+  "temp": 0.7,
+  "top_p": 0.9,
+  "max_tokens": 2048,
+  "ctx_limit": 8192,
+  "system_prompt": "You are Monolith. Be precise.",
+  "context_injection": ""
+}

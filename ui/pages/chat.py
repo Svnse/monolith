@@ -1,19 +1,26 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
-    QLineEdit, QPushButton
+    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
+    QLineEdit, QPushButton, QLabel, QFileDialog
 )
 from PySide6.QtGui import QTextCursor
 from PySide6.QtCore import Signal, Qt, QTimer
 
+from core.state import SystemStatus
 from core.style import BG_INPUT, FG_DIM, FG_ACCENT, ACCENT_GOLD
-from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection
+from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection, SkeetSlider
+from ui.modules.llm_config import load_config, save_config
 
 class PageChat(QWidget):
     sig_generate = Signal(str)
+    sig_load = Signal()
+    sig_unload = Signal()
 
     def __init__(self, state):
         super().__init__()
         self.state = state
+        self.config = load_config()
+        self.state.gguf_path = self.config.get("gguf_path")
+        self.state.ctx_limit = int(self.config.get("ctx_limit", self.state.ctx_limit))
         self._token_buf: list[str] = []
         self._flush_timer = QTimer(self)
         self._flush_timer.setInterval(25)
@@ -57,7 +64,8 @@ class PageChat(QWidget):
             background: {BG_INPUT}; color: #888; border: 1px solid #333; 
             font-family: 'Verdana'; font-size: 11px; padding: 4px;
         """)
-        self.txt_ctx.textChanged.connect(lambda: setattr(self.state, 'context_injection', self.txt_ctx.text()))
+        self.txt_ctx.setText(self.config.get("context_injection", ""))
+        self.txt_ctx.textChanged.connect(self._on_context_injection_changed)
         d_layout.addWidget(self.txt_ctx)
         self.drawer.set_content_layout(d_layout)
         chat_layout.addWidget(self.drawer)
@@ -95,6 +103,73 @@ class PageChat(QWidget):
         
         chat_group.add_layout(chat_layout)
         left_col.addWidget(chat_group)
+
+        config_section = CollapsibleSection("⚙ CONFIGURATION")
+        config_layout = QVBoxLayout()
+        config_layout.setSpacing(12)
+
+        config_row = QHBoxLayout()
+        config_row.setSpacing(12)
+
+        loader_col = QVBoxLayout()
+        grp_load = SkeetGroupBox("MODEL LOADER")
+        self.path_display = QLineEdit()
+        self.path_display.setReadOnly(True)
+        self.path_display.setPlaceholderText("No GGUF Selected")
+        self.path_display.setStyleSheet(
+            f"background: {BG_INPUT}; color: #555; border: 1px solid #333; padding: 5px;"
+        )
+        btn_browse = SkeetButton("...")
+        btn_browse.setFixedWidth(30)
+        btn_browse.clicked.connect(self.pick_file)
+        row_file = QHBoxLayout()
+        row_file.addWidget(self.path_display)
+        row_file.addWidget(btn_browse)
+        self.btn_load = SkeetButton("LOAD MODEL")
+        self.btn_load.clicked.connect(self.toggle_load)
+        grp_load.add_layout(row_file)
+        grp_load.add_widget(self.btn_load)
+        loader_col.addWidget(grp_load)
+        loader_col.addStretch()
+
+        ai_col = QVBoxLayout()
+        grp_ai = SkeetGroupBox("AI CONFIGURATION")
+        self.s_temp = SkeetSlider("Temperature", 0.1, 2.0, self.config.get("temp", 0.7))
+        self.s_temp.valueChanged.connect(lambda v: self._update_config_value("temp", v))
+        self.s_top = SkeetSlider("Top-P", 0.1, 1.0, self.config.get("top_p", 0.9))
+        self.s_top.valueChanged.connect(lambda v: self._update_config_value("top_p", v))
+        self.s_tok = SkeetSlider(
+            "Max Tokens", 512, 8192, self.config.get("max_tokens", 2048), is_int=True
+        )
+        self.s_tok.valueChanged.connect(
+            lambda v: self._update_config_value("max_tokens", int(v))
+        )
+        self.s_ctx = SkeetSlider(
+            "Context Limit", 1024, 16384, self.config.get("ctx_limit", 8192), is_int=True
+        )
+        self.s_ctx.valueChanged.connect(self._on_ctx_limit_changed)
+        lbl_sys = QLabel("System Prompt")
+        lbl_sys.setStyleSheet(f"color: {FG_DIM}; font-size: 11px; margin-top: 5px;")
+        self.inp_sys = QLineEdit(self.config.get("system_prompt", "You are Monolith. Be precise."))
+        self.inp_sys.setStyleSheet(
+            f"background: {BG_INPUT}; color: #aaa; border: 1px solid #333; padding: 5px;"
+        )
+        self.inp_sys.textChanged.connect(self._on_system_prompt_changed)
+        grp_ai.add_widget(self.s_temp)
+        grp_ai.add_widget(self.s_top)
+        grp_ai.add_widget(self.s_tok)
+        grp_ai.add_widget(self.s_ctx)
+        grp_ai.add_widget(lbl_sys)
+        grp_ai.add_widget(self.inp_sys)
+        ai_col.addWidget(grp_ai)
+        ai_col.addStretch()
+
+        config_row.addLayout(loader_col)
+        config_row.addLayout(ai_col)
+        config_layout.addLayout(config_row)
+        config_section.set_content_layout(config_layout)
+        left_col.addWidget(config_section)
+        left_col.addStretch()
         layout.addLayout(left_col, 3)
 
         right_col = QVBoxLayout()
@@ -108,6 +183,9 @@ class PageChat(QWidget):
         trace_group.add_widget(self.trace)
         right_col.addWidget(trace_group)
         layout.addLayout(right_col, 2)
+
+        self._sync_path_display()
+        self._update_load_button_text()
 
     def send(self):
         txt = self.input.text().strip()
@@ -138,3 +216,53 @@ class PageChat(QWidget):
         self.chat.clear()
         self.trace.clear()
         self.chat.append(f"<span style='color:{FG_DIM}'>--- SESSION RESET ---</span>")
+
+    def _sync_path_display(self):
+        if self.state.gguf_path:
+            self.path_display.setText(self.state.gguf_path)
+            self.path_display.setToolTip(self.state.gguf_path)
+        else:
+            self.path_display.clear()
+            self.path_display.setToolTip("")
+
+    def _save_config(self):
+        save_config(self.config)
+
+    def _update_config_value(self, key, value):
+        self.config[key] = value
+        self._save_config()
+
+    def _on_ctx_limit_changed(self, value):
+        self.state.ctx_limit = int(value)
+        self._update_config_value("ctx_limit", int(value))
+
+    def _on_system_prompt_changed(self, text):
+        self._update_config_value("system_prompt", text)
+
+    def _on_context_injection_changed(self, text):
+        self._update_config_value("context_injection", text)
+
+    def pick_file(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Select GGUF", "", "GGUF (*.gguf)")
+        if path:
+            self.state.gguf_path = path
+            self.config["gguf_path"] = path
+            self._sync_path_display()
+            self._save_config()
+
+    def toggle_load(self):
+        if self.state.model_loaded:
+            self.sig_unload.emit()
+        else:
+            self.sig_load.emit()
+
+    def _update_load_button_text(self):
+        self.btn_load.setText("UNLOAD MODEL" if self.state.model_loaded else "LOAD MODEL")
+
+    def update_status(self, status):
+        is_loading = status in (SystemStatus.LOADING, SystemStatus.RUNNING)
+        self.btn_load.setEnabled(not is_loading)
+        if is_loading:
+            self.btn_load.setText("PROCESSING...")
+        else:
+            self._update_load_button_text()

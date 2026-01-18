@@ -1,5 +1,6 @@
 from PySide6.QtCore import QObject, QThread, Signal
 from core.state import AppState, SystemStatus
+from ui.modules.llm_config import load_config
 
 try:
     from llama_cpp import Llama
@@ -165,7 +166,7 @@ class LLMEngine(QObject):
         self.set_status(SystemStatus.READY)
         self.sig_trace.emit("→ model unloaded")
 
-    def generate(self, user_input):
+    def generate(self, user_input, config=None):
         if not self.state.model_loaded:
             self.sig_trace.emit("ERROR: Model offline.")
             return
@@ -175,15 +176,24 @@ class LLMEngine(QObject):
             return
 
         self.set_status(SystemStatus.RUNNING)
-        
-        messages = [{"role": "system", "content": self.state.system_prompt}]
-        if self.state.context_injection:
-            messages.append({"role": "system", "content": f"CONTEXT: {self.state.context_injection}"})
+
+        if config is None:
+            config = load_config()
+
+        system_prompt = config.get("system_prompt", "You are Monolith. Be precise.")
+        context_injection = config.get("context_injection", "")
+        temp = float(config.get("temp", 0.7))
+        top_p = float(config.get("top_p", 0.9))
+        max_tokens = int(config.get("max_tokens", 2048))
+
+        messages = [{"role": "system", "content": system_prompt}]
+        if context_injection:
+            messages.append({"role": "system", "content": f"CONTEXT: {context_injection}"})
         messages.append({"role": "user", "content": user_input})
 
         self.worker = GeneratorWorker(
-            self.llm, messages, self.state.temp, 
-            self.state.top_p, self.state.max_tokens
+            self.llm, messages, temp,
+            top_p, max_tokens
         )
         self.worker.token.connect(self.sig_token)
         self.worker.trace.connect(self.sig_trace)

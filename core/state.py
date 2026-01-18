@@ -19,10 +19,3 @@ class AppState:
         # Resources
         self.ctx_limit: int = 8192
         self.ctx_used: int = 0
-        
-        # AI Configuration
-        self.temp: float = 0.7
-        self.top_p: float = 0.9
-        self.max_tokens: int = 2048
-        self.system_prompt: str = "You are Monolith. Be precise."
-        self.context_injection: str = ""

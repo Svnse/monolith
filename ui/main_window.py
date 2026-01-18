@@ -61,15 +61,11 @@ class MonolithUI(QMainWindow):
         self.module_strip.sig_module_selected.connect(self.switch_to_module)
         self.module_strip.sig_module_closed.connect(self.close_module)
 
-        self.btn_conf = SidebarButton("⚙", "CONFIG")
-        self.btn_conf.clicked.connect(lambda: self.set_page("settings"))
-
         self.btn_addons = SidebarButton("＋", "ADDONS")
         self.btn_addons.clicked.connect(lambda: self.set_page("addons"))
 
         sidebar_layout.addWidget(self.module_strip)
         sidebar_layout.addStretch() 
-        sidebar_layout.addWidget(self.btn_conf)
         sidebar_layout.addWidget(self.btn_addons)
 
         content_layout.addWidget(self.sidebar)
@@ -92,12 +88,9 @@ class MonolithUI(QMainWindow):
     def attach_host(self, host: AddonHost) -> None:
         self.host = host
         addons = host.mount_page("addons")
-        settings = host.mount_page("settings")
 
         self.stack.addWidget(addons)
-        self.stack.addWidget(settings)
         self.pages["addons"] = addons
-        self.pages["settings"] = settings
 
         self.set_page("empty")
 
@@ -151,7 +144,6 @@ class MonolithUI(QMainWindow):
 
     def _update_sidebar_state(self, page_idx=None, module_selection=False):
         self.btn_addons.setChecked(page_idx == "addons" and not module_selection)
-        self.btn_conf.setChecked(page_idx == "settings" and not module_selection)
         if not module_selection: self.module_strip.deselect_all()
 
     def update_status(self, status):
@@ -162,12 +154,6 @@ class MonolithUI(QMainWindow):
         else:
             self.lbl_status.setStyleSheet(f"color: {FG_ACCENT}; font-size: 10px; font-weight: bold;")
         self.lbl_status.setText(status.value if hasattr(status, "value") else str(status))
-
-        # Pass loading state to settings page to lock buttons
-        assert self.host is not None, "MonolithUI.update_status called before attach_host"
-        settings = self.host.get_page_widget("settings")
-        if settings and hasattr(settings, "set_loading_state"):
-            settings.set_loading_state(status == SystemStatus.LOADING or status == SystemStatus.RUNNING)
 
     def update_ctx(self, used):
         self.state.ctx_used = used
