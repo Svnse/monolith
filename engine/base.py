@@ -18,7 +18,7 @@ class EnginePort(Protocol):
     def unload_model(self) -> None:
         ...
 
-    def generate(self, user_input: str) -> None:
+    def generate(self, user_input: str, config: dict | None = None) -> None:
         ...
 
     def stop_generation(self) -> None:
