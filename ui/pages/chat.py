@@ -1,12 +1,21 @@
+import html
+import json
+import os
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-    QLineEdit, QPushButton, QLabel, QFileDialog
+    QLineEdit, QPushButton, QLabel, QFileDialog,
+    QSplitter, QListWidget, QListWidgetItem, QStackedWidget,
+    QMessageBox, QButtonGroup
 )
 from PySide6.QtGui import QTextCursor
 from PySide6.QtCore import Signal, Qt, QTimer
 
 from core.state import SystemStatus
-from core.style import BG_INPUT, FG_DIM, FG_ACCENT, FG_TEXT, ACCENT_GOLD
+from core.style import BG_INPUT, FG_DIM, FG_TEXT, ACCENT_GOLD
 from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection, SkeetSlider
 from ui.modules.llm_config import load_config, save_config
 
@@ -25,27 +34,23 @@ class PageChat(QWidget):
         self._flush_timer = QTimer(self)
         self._flush_timer.setInterval(25)
         self._flush_timer.timeout.connect(self._flush_tokens)
-        layout = QHBoxLayout(self)
+        self._archive_dir = self._get_archive_dir()
+        self._archive_dir.mkdir(parents=True, exist_ok=True)
+        self._session_counter = 0
+        self._current_session = self._create_session()
+        self._active_assistant_index = None
+
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
-        # LEFT COLUMN (Chat)
-        left_col = QVBoxLayout()
-        chat_group = SkeetGroupBox("TERMINAL")
-        chat_layout = QVBoxLayout()
-        chat_layout.setSpacing(10)
+        main_split = QSplitter(Qt.Vertical)
+        main_split.setChildrenCollapsible(False)
+        layout.addWidget(main_split)
 
-        # Chat Controls
-        controls = QHBoxLayout()
-        btn_new = SkeetButton("NEW SESSION")
-        btn_new.clicked.connect(self.clear_chat)
-        btn_clear = SkeetButton("CLEAR LOG")
-        btn_clear.clicked.connect(lambda: self.chat.clear())
-        
-        controls.addStretch()
-        controls.addWidget(btn_new)
-        controls.addWidget(btn_clear)
-        chat_layout.addLayout(controls)
+        top_split = QSplitter(Qt.Horizontal)
+        top_split.setChildrenCollapsible(False)
+        main_split.addWidget(top_split)
 
         config_section = CollapsibleSection("⚙ CONFIGURATION")
         config_section.btn_toggle.setStyleSheet(f"""
@@ -126,7 +131,116 @@ class PageChat(QWidget):
         config_row.addLayout(ai_col)
         config_layout.addLayout(config_row)
         config_section.set_content_layout(config_layout)
-        chat_layout.addWidget(config_section)
+
+        operations_group = SkeetGroupBox("OPERATIONS")
+        operations_layout = QVBoxLayout()
+        operations_layout.setSpacing(10)
+
+        tab_row = QHBoxLayout()
+        tab_style = f"""
+            QPushButton {{
+                background: #181818; border: 1px solid #333; color: {FG_DIM};
+                padding: 6px 12px; font-size: 10px; font-weight: bold; border-radius: 2px;
+            }}
+            QPushButton:checked {{
+                background: #222; color: {ACCENT_GOLD}; border: 1px solid {ACCENT_GOLD};
+            }}
+            QPushButton:hover {{ color: {FG_TEXT}; border: 1px solid {FG_TEXT}; }}
+        """
+        self.btn_tab_control = SkeetButton("CONTROL")
+        self.btn_tab_control.setCheckable(True)
+        self.btn_tab_control.setChecked(True)
+        self.btn_tab_control.setStyleSheet(tab_style)
+        self.btn_tab_archive = SkeetButton("ARCHIVE")
+        self.btn_tab_archive.setCheckable(True)
+        self.btn_tab_archive.setStyleSheet(tab_style)
+        tab_group = QButtonGroup(self)
+        tab_group.setExclusive(True)
+        tab_group.addButton(self.btn_tab_control)
+        tab_group.addButton(self.btn_tab_archive)
+        tab_row.addWidget(self.btn_tab_control)
+        tab_row.addWidget(self.btn_tab_archive)
+        tab_row.addStretch()
+        operations_layout.addLayout(tab_row)
+
+        self.ops_stack = QStackedWidget()
+        operations_layout.addWidget(self.ops_stack)
+
+        control_tab = QWidget()
+        control_layout = QVBoxLayout(control_tab)
+        control_layout.setSpacing(12)
+
+        session_row = QHBoxLayout()
+        self.btn_new_session = SkeetButton("NEW SESSION")
+        self.btn_new_session.clicked.connect(self._start_new_session)
+        self.btn_clear_log = SkeetButton("CLEAR LOG")
+        self.btn_clear_log.clicked.connect(self._prompt_clear_session)
+        session_row.addWidget(self.btn_new_session)
+        session_row.addWidget(self.btn_clear_log)
+        session_row.addStretch()
+        control_layout.addLayout(session_row)
+        control_layout.addWidget(config_section)
+        control_layout.addStretch()
+
+        archive_tab = QWidget()
+        archive_layout = QVBoxLayout(archive_tab)
+        archive_layout.setSpacing(10)
+
+        archive_controls = QHBoxLayout()
+        self.btn_save_chat = SkeetButton("SAVE")
+        self.btn_save_chat.clicked.connect(self._save_chat_archive)
+        self.btn_load_chat = SkeetButton("LOAD")
+        self.btn_load_chat.clicked.connect(self._load_chat_archive)
+        self.btn_clear_chat = SkeetButton("CLEAR")
+        self.btn_clear_chat.clicked.connect(self._prompt_clear_session)
+        archive_controls.addWidget(self.btn_save_chat)
+        archive_controls.addWidget(self.btn_load_chat)
+        archive_controls.addWidget(self.btn_clear_chat)
+        archive_controls.addStretch()
+        archive_layout.addLayout(archive_controls)
+
+        self.archive_list = QListWidget()
+        self.archive_list.setStyleSheet(f"""
+            QListWidget {{
+                background: {BG_INPUT}; color: {FG_TEXT}; border: 1px solid #222;
+                font-family: 'Consolas', monospace; font-size: 10px;
+            }}
+            QListWidget::item {{ padding: 6px; }}
+            QListWidget::item:selected {{ background: #222; color: {ACCENT_GOLD}; }}
+        """)
+        archive_layout.addWidget(self.archive_list)
+
+        self.ops_stack.addWidget(control_tab)
+        self.ops_stack.addWidget(archive_tab)
+        self.btn_tab_control.toggled.connect(lambda checked: self._switch_ops_tab(0, checked))
+        self.btn_tab_archive.toggled.connect(lambda checked: self._switch_ops_tab(1, checked))
+
+        operations_group.add_layout(operations_layout)
+
+        right_stack = QSplitter(Qt.Vertical)
+        right_stack.setChildrenCollapsible(False)
+
+        trace_group = SkeetGroupBox("REASONING TRACE")
+        self.trace = QTextEdit()
+        self.trace.setReadOnly(True)
+        self.trace.setStyleSheet(f"""
+            background: {BG_INPUT}; color: {FG_TEXT}; border: 1px solid #222; 
+            font-family: 'Consolas', monospace; font-size: 10px;
+        """)
+        trace_group.add_widget(self.trace)
+
+        right_stack.addWidget(trace_group)
+        right_stack.addWidget(operations_group)
+        right_stack.setStretchFactor(0, 1)
+        right_stack.setStretchFactor(1, 1)
+        right_stack.setSizes([200, 200])
+
+        top_split.addWidget(right_stack)
+        top_split.setStretchFactor(0, 2)
+
+        chat_group = SkeetGroupBox("TERMINAL")
+        chat_layout = QVBoxLayout()
+        chat_layout.setSpacing(10)
 
         self.chat = QTextEdit()
         self.chat.setReadOnly(True)
@@ -168,32 +282,25 @@ class PageChat(QWidget):
         chat_layout.addLayout(input_row)
         
         chat_group.add_layout(chat_layout)
-        left_col.addWidget(chat_group)
-        left_col.addStretch()
-        layout.addLayout(left_col, 3)
-
-        right_col = QVBoxLayout()
-        trace_group = SkeetGroupBox("REASONING TRACE")
-        self.trace = QTextEdit()
-        self.trace.setReadOnly(True)
-        self.trace.setStyleSheet(f"""
-            background: {BG_INPUT}; color: {FG_TEXT}; border: 1px solid #222; 
-            font-family: 'Consolas', monospace; font-size: 10px;
-        """)
-        trace_group.add_widget(self.trace)
-        right_col.addWidget(trace_group)
-        layout.addLayout(right_col, 2)
+        main_split.addWidget(chat_group)
+        main_split.setStretchFactor(0, 2)
+        main_split.setStretchFactor(1, 3)
 
         self._sync_path_display()
         self._update_load_button_text()
+        self._refresh_archive_list()
 
     def send(self):
         txt = self.input.text().strip()
-        if not txt: return
+        if not txt:
+            return
         self.input.clear()
-        self.chat.append(f"<span style='color:{ACCENT_GOLD}'><b>USER:</b></span> {txt}")
+        safe_txt = html.escape(txt)
+        self.chat.append(f"<span style='color:{ACCENT_GOLD}'><b>USER:</b></span> {safe_txt}")
         self.chat.append(f"<span style='color:{FG_TEXT}'><b>MONOLITH:</b></span>")
         self.chat.moveCursor(QTextCursor.End)
+        self._add_message("user", txt)
+        self._active_assistant_index = self._add_message("assistant", "")
         self.sig_generate.emit(txt)
 
     def _flush_tokens(self):
@@ -208,14 +315,17 @@ class PageChat(QWidget):
 
     def append_token(self, t):
         self._token_buf.append(t)
+        self._append_assistant_token(t)
         if not self._flush_timer.isActive():
             self._flush_timer.start()
 
-    def append_trace(self, html): self.trace.append(html)
+    def append_trace(self, html):
+        if "→" in html:
+            html = html.replace("→", f"<span style='color:{ACCENT_GOLD}'>→</span>")
+        self.trace.append(html)
+
     def clear_chat(self):
-        self.chat.clear()
-        self.trace.clear()
-        self.chat.append(f"<span style='color:{FG_DIM}'>--- SESSION RESET ---</span>")
+        self._set_current_session(self._create_session(), show_reset=True)
 
     def _sync_path_display(self):
         if self.state.gguf_path:
@@ -266,3 +376,223 @@ class PageChat(QWidget):
             self.btn_load.setText("PROCESSING...")
         else:
             self._update_load_button_text()
+
+    def _switch_ops_tab(self, index, checked):
+        if checked:
+            self.ops_stack.setCurrentIndex(index)
+
+    def _start_new_session(self):
+        self._set_current_session(self._create_session(), show_reset=True)
+
+    def _prompt_clear_session(self):
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Clear Session")
+        dialog.setText("Choose how to clear the current session.")
+        btn_clear = dialog.addButton("Clear Logs", QMessageBox.AcceptRole)
+        btn_delete = dialog.addButton("Delete Chat", QMessageBox.DestructiveRole)
+        dialog.addButton("Cancel", QMessageBox.RejectRole)
+        dialog.exec()
+        clicked = dialog.clickedButton()
+        if clicked == btn_clear:
+            self._clear_current_session(delete_archive=False)
+        elif clicked == btn_delete:
+            self._clear_current_session(delete_archive=True)
+
+    def _clear_current_session(self, delete_archive):
+        archive_path = self._current_session.get("archive_path")
+        if delete_archive and archive_path:
+            try:
+                Path(archive_path).unlink()
+            except OSError:
+                pass
+        self._set_current_session(self._create_session(), show_reset=True)
+        self._refresh_archive_list()
+
+    def _save_chat_archive(self):
+        session = self._current_session
+        messages = session["messages"]
+        now = self._now_iso()
+        created_at = session.get("created_at") or now
+        updated_at = now
+        title = self._derive_title(messages)
+        summary = self._build_summary(messages)
+        message_payload = []
+        for idx, msg in enumerate(messages, start=1):
+            message_payload.append({
+                "i": idx,
+                "time": msg.get("time") or now,
+                "role": msg.get("role", "user"),
+                "text": msg.get("text", "")
+            })
+        meta = {
+            "title": title,
+            "created_at": created_at,
+            "updated_at": updated_at,
+            "message_count": len(message_payload),
+            "summary": summary
+        }
+        payload = {"meta": meta, "messages": message_payload}
+        archive_path = session.get("archive_path")
+        if not archive_path:
+            slug = self._slugify(title)
+            stamp = now.replace(":", "-").replace(".", "-")
+            archive_path = self._archive_dir / f"{slug}_{stamp}.json"
+        else:
+            archive_path = Path(archive_path)
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        with archive_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+        session["archive_path"] = str(archive_path)
+        session["created_at"] = created_at
+        session["updated_at"] = updated_at
+        session["summary"] = summary
+        self._refresh_archive_list()
+
+    def _load_chat_archive(self):
+        item = self.archive_list.currentItem()
+        if not item:
+            return
+        archive_path = Path(item.data(Qt.UserRole))
+        try:
+            with archive_path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception:
+            QMessageBox.warning(self, "Load Failed", "Could not read archive file.")
+            return
+        meta = data.get("meta", {})
+        messages = []
+        for msg in data.get("messages", []):
+            role = msg.get("role", "user")
+            text = msg.get("text", "")
+            time = msg.get("time", meta.get("updated_at", self._now_iso()))
+            messages.append({"i": msg.get("i"), "time": time, "role": role, "text": text})
+        session = self._create_session(
+            messages=messages,
+            created_at=meta.get("created_at"),
+            updated_at=meta.get("updated_at"),
+            archive_path=str(archive_path),
+            summary=meta.get("summary", [])
+        )
+        self._set_current_session(session, show_reset=False)
+
+    def _refresh_archive_list(self):
+        self.archive_list.clear()
+        items = []
+        for path in sorted(self._archive_dir.glob("*.json")):
+            try:
+                with path.open("r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+            except Exception:
+                continue
+            meta = data.get("meta", {})
+            title = meta.get("title", path.stem)
+            summary = meta.get("summary", [])
+            tooltip = "\n".join(summary) if summary else title
+            updated_at = meta.get("updated_at", "")
+            message_count = meta.get("message_count", len(data.get("messages", [])))
+            items.append((updated_at, title, message_count, str(path), tooltip))
+        items.sort(key=lambda item: item[0], reverse=True)
+        for updated_at, title, message_count, path, tooltip in items:
+            date_label = updated_at.split("T")[0] if updated_at else "Unknown date"
+            subtext = f"{date_label} • {message_count} msgs"
+            list_item = QListWidgetItem(f"{title}\n{subtext}")
+            list_item.setData(Qt.UserRole, path)
+            list_item.setToolTip(tooltip)
+            self.archive_list.addItem(list_item)
+
+    def _create_session(self, messages=None, created_at=None, updated_at=None, archive_path=None, summary=None):
+        self._session_counter += 1
+        now = self._now_iso()
+        return {
+            "id": self._session_counter,
+            "created_at": created_at or now,
+            "updated_at": updated_at or now,
+            "messages": messages or [],
+            "archive_path": archive_path,
+            "summary": summary or []
+        }
+
+    def _set_current_session(self, session, show_reset=False):
+        self._current_session = session
+        self._active_assistant_index = None
+        self._render_session(session, show_reset=show_reset)
+
+    def _render_session(self, session, show_reset=False):
+        self.chat.clear()
+        self.trace.clear()
+        if not session["messages"]:
+            if show_reset:
+                self.chat.append(f"<span style='color:{FG_DIM}'>--- SESSION RESET ---</span>")
+            return
+        for msg in session["messages"]:
+            safe = html.escape(msg.get("text", ""))
+            if msg.get("role") == "user":
+                self.chat.append(
+                    f"<span style='color:{ACCENT_GOLD}'><b>USER:</b></span> {safe}"
+                )
+            else:
+                self.chat.append(
+                    f"<span style='color:{FG_TEXT}'><b>MONOLITH:</b></span> {safe}"
+                )
+        self.chat.moveCursor(QTextCursor.End)
+
+    def _add_message(self, role, text):
+        now = self._now_iso()
+        message = {
+            "i": len(self._current_session["messages"]) + 1,
+            "time": now,
+            "role": role,
+            "text": text
+        }
+        self._current_session["messages"].append(message)
+        self._current_session["updated_at"] = now
+        return len(self._current_session["messages"]) - 1
+
+    def _append_assistant_token(self, token):
+        if self._active_assistant_index is None:
+            self._active_assistant_index = self._add_message("assistant", "")
+        msg = self._current_session["messages"][self._active_assistant_index]
+        msg["text"] += token
+        msg["time"] = self._now_iso()
+        self._current_session["updated_at"] = msg["time"]
+
+    def _derive_title(self, messages):
+        for msg in messages:
+            if msg.get("role") == "user":
+                text = msg.get("text", "").strip()
+                if text:
+                    return text[:60]
+        return "Untitled Chat"
+
+    def _build_summary(self, messages):
+        summary = []
+        title = self._derive_title(messages)
+        summary.append(f"Title: {title}")
+        user_msgs = [m["text"] for m in messages if m.get("role") == "user" and m.get("text")]
+        assistant_msgs = [m["text"] for m in messages if m.get("role") == "assistant" and m.get("text")]
+
+        def _trim(text, limit=120):
+            return text if len(text) <= limit else f"{text[:limit]}…"
+
+        for msg in user_msgs[-3:]:
+            summary.append(f"User: {_trim(msg)}")
+        for msg in assistant_msgs[-3:]:
+            summary.append(f"Assistant: {_trim(msg)}")
+        if len(summary) < 3:
+            summary.append(f"Messages: {len(messages)}")
+        if len(summary) < 3:
+            summary.append("Summary: Not enough messages yet.")
+        return summary[:6]
+
+    def _slugify(self, text):
+        slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+        return slug or "chat"
+
+    def _now_iso(self):
+        return datetime.now(timezone.utc).isoformat()
+
+    def _get_archive_dir(self):
+        if os.name == "nt":
+            base = os.getenv("APPDATA", str(Path.home() / "AppData" / "Roaming"))
+            return Path(base) / "Monolith" / "chats"
+        return Path.home() / "Monolith" / "chats"

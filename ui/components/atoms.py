@@ -58,6 +58,21 @@ class SkeetButton(QPushButton):
             QPushButton:disabled {{ background: #111; color: #333; border: 1px solid #222; }}
         """)
 
+class SkeetTriangleButton(QPushButton):
+    def __init__(self, text):
+        super().__init__(text)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(18, 18)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: #181818; border: 1px solid #333; color: {FG_TEXT};
+                padding: 0; font-size: 10px; font-weight: bold; border-radius: 2px;
+            }}
+            QPushButton:hover {{ background: #222; color: {ACCENT_GOLD}; border: 1px solid {ACCENT_GOLD}; }}
+            QPushButton:disabled {{ background: #111; color: #333; border: 1px solid #222; }}
+        """)
+
 class SkeetSlider(QWidget):
     valueChanged = Signal(float)
     def __init__(self, label, min_v, max_v, init_v, is_int=False):
