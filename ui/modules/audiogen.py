@@ -11,7 +11,7 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtGui import QPainter, QPen, QColor
 
 from core.style import BG_INPUT, BORDER_DARK, FG_DIM, FG_TEXT, FG_ACCENT, FG_ERROR
-from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection
+from ui.components.atoms import SkeetGroupBox, SkeetButton, SkeetTriangleButton, CollapsibleSection
 
 AUDIOCRAFT_AVAILABLE = False
 try:
@@ -210,11 +210,9 @@ class AudioGenModule(QWidget):
             }}
         """)
         duration_row.addWidget(lbl_duration)
-        btn_duration_up = SkeetButton("+")
-        btn_duration_up.setFixedWidth(26)
+        btn_duration_up = SkeetTriangleButton("◀")
         btn_duration_up.clicked.connect(self.inp_duration.stepUp)
-        btn_duration_down = SkeetButton("-")
-        btn_duration_down.setFixedWidth(26)
+        btn_duration_down = SkeetTriangleButton("▶")
         btn_duration_down.clicked.connect(self.inp_duration.stepDown)
         duration_row.addWidget(btn_duration_up)
         duration_row.addWidget(self.inp_duration)

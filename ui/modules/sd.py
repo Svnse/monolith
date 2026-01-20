@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QPixmap, QImage
 
 from core.style import BG_INPUT, BORDER_DARK, FG_DIM, FG_TEXT, FG_ACCENT, FG_ERROR
-from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection
+from ui.components.atoms import SkeetGroupBox, SkeetButton, SkeetTriangleButton, CollapsibleSection
 
 DIFFUSERS_AVAILABLE = False
 try:
@@ -152,15 +152,13 @@ class SDModule(QWidget):
             }}
         """)
         steps_row.addWidget(lbl_steps)
-        btn_steps_up = SkeetButton("+")
-        btn_steps_up.setFixedWidth(26)
-        btn_steps_up.clicked.connect(self.inp_steps.stepUp)
-        btn_steps_down = SkeetButton("-")
-        btn_steps_down.setFixedWidth(26)
+        btn_steps_down = SkeetTriangleButton("◀")
         btn_steps_down.clicked.connect(self.inp_steps.stepDown)
-        steps_row.addWidget(btn_steps_up)
-        steps_row.addWidget(self.inp_steps)
+        btn_steps_up = SkeetTriangleButton("▶")
+        btn_steps_up.clicked.connect(self.inp_steps.stepUp)
         steps_row.addWidget(btn_steps_down)
+        steps_row.addWidget(self.inp_steps)
+        steps_row.addWidget(btn_steps_up)
         steps_row.addStretch()
         config_layout.addLayout(steps_row)
         
@@ -180,16 +178,14 @@ class SDModule(QWidget):
                 border: 1px solid {BORDER_DARK}; padding: 4px;
             }}
         """)
-        btn_strength_up = SkeetButton("+")
-        btn_strength_up.setFixedWidth(26)
-        btn_strength_up.clicked.connect(self.inp_strength.stepUp)
-        btn_strength_down = SkeetButton("-")
-        btn_strength_down.setFixedWidth(26)
+        btn_strength_down = SkeetTriangleButton("◀")
         btn_strength_down.clicked.connect(self.inp_strength.stepDown)
+        btn_strength_up = SkeetTriangleButton("▶")
+        btn_strength_up.clicked.connect(self.inp_strength.stepUp)
         strength_row.addWidget(lbl_strength)
-        strength_row.addWidget(btn_strength_up)
-        strength_row.addWidget(self.inp_strength)
         strength_row.addWidget(btn_strength_down)
+        strength_row.addWidget(self.inp_strength)
+        strength_row.addWidget(btn_strength_up)
         strength_row.addStretch()
         config_layout.addLayout(strength_row)
         
@@ -209,27 +205,9 @@ class SDModule(QWidget):
                 border: 1px solid {BORDER_DARK}; padding: 4px;
             }}
         """)
-        btn_seed_down = SkeetButton("◀")
-        btn_seed_down.setFixedSize(20, 20)
-        btn_seed_down.setStyleSheet(f"""
-            QPushButton {{
-                background: #181818; border: 1px solid #333; color: {FG_DIM};
-                padding: 0; font-size: 10px; font-weight: bold; border-radius: 2px;
-            }}
-            QPushButton:hover {{ background: #222; color: {FG_ACCENT}; border: 1px solid {FG_ACCENT}; }}
-            QPushButton:disabled {{ background: #111; color: #333; border: 1px solid #222; }}
-        """)
+        btn_seed_down = SkeetTriangleButton("◀")
         btn_seed_down.clicked.connect(self.inp_seed.stepDown)
-        btn_seed_up = SkeetButton("▶")
-        btn_seed_up.setFixedSize(20, 20)
-        btn_seed_up.setStyleSheet(f"""
-            QPushButton {{
-                background: #181818; border: 1px solid #333; color: {FG_DIM};
-                padding: 0; font-size: 10px; font-weight: bold; border-radius: 2px;
-            }}
-            QPushButton:hover {{ background: #222; color: {FG_ACCENT}; border: 1px solid {FG_ACCENT}; }}
-            QPushButton:disabled {{ background: #111; color: #333; border: 1px solid #222; }}
-        """)
+        btn_seed_up = SkeetTriangleButton("▶")
         btn_seed_up.clicked.connect(self.inp_seed.stepUp)
         seed_row.addWidget(lbl_seed)
         seed_row.addWidget(btn_seed_down)
