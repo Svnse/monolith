@@ -14,10 +14,11 @@ from ui.components.atoms import SkeetGroupBox, SkeetButton, SkeetTriangleButton,
 
 DIFFUSERS_AVAILABLE = False
 try:
-    import diffusers
+    import importlib
+    importlib.import_module("diffusers")
     DIFFUSERS_AVAILABLE = True
 except ImportError:
-    pass
+    DIFFUSERS_AVAILABLE = False
 
 
 class SDWorker(QThread):
@@ -36,6 +37,14 @@ class SDWorker(QThread):
     def run(self):
         try:
             import torch
+            if not DIFFUSERS_AVAILABLE:
+                self.error.emit("ERROR: diffusers not installed. pip install diffusers")
+                return
+            try:
+                import diffusers
+            except ImportError:
+                self.error.emit("ERROR: diffusers not installed. pip install diffusers")
+                return
             from diffusers import StableDiffusionPipeline
             
             self.progress.emit("Loading pipeline...")
@@ -360,7 +369,7 @@ class SDModule(QWidget):
 
     def _start_generate(self):
         if not DIFFUSERS_AVAILABLE:
-            self._set_status("ERROR: diffusers not installed", FG_ERROR)
+            self._report_diffusers_missing()
             return
             
         prompt = self.inp_prompt.text().strip()
@@ -415,7 +424,11 @@ class SDModule(QWidget):
         self.btn_save.setEnabled(True)
 
     def _on_error(self, err_msg):
-        self._set_status(f"ERROR: {err_msg}", FG_ERROR)
+        if err_msg == "ERROR: diffusers not installed. pip install diffusers":
+            self._set_status(err_msg, FG_ERROR)
+            self._append_terminal_error(err_msg)
+        else:
+            self._set_status(f"ERROR: {err_msg}", FG_ERROR)
         self.btn_generate.setEnabled(True)
 
     def _save_image(self):
@@ -431,3 +444,11 @@ class SDModule(QWidget):
             self._set_status(f"SAVED: {filename}", FG_ACCENT)
         except Exception as e:
             self._set_status(f"SAVE ERROR: {str(e)}", FG_ERROR)
+
+    def _append_terminal_error(self, message):
+        self.chat.append(f"<span style='color:{FG_ERROR}'>{message}</span>")
+
+    def _report_diffusers_missing(self):
+        message = "ERROR: diffusers not installed. pip install diffusers"
+        self._set_status(message, FG_ERROR)
+        self._append_terminal_error(message)

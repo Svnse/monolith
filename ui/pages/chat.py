@@ -39,6 +39,7 @@ class PageChat(QWidget):
         self._session_counter = 0
         self._current_session = self._create_session()
         self._active_assistant_index = None
+        self._last_status = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -371,6 +372,13 @@ class PageChat(QWidget):
             self.btn_load.setText("PROCESSING...")
         else:
             self._update_load_button_text()
+        if self._last_status == SystemStatus.RUNNING and status == SystemStatus.READY:
+            if len(self._current_session["messages"]) > 0:
+                try:
+                    self._save_chat_archive()
+                except Exception:
+                    pass
+        self._last_status = status
 
     def _switch_ops_tab(self, index, checked):
         if checked:
