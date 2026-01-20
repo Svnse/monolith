@@ -15,10 +15,11 @@ from ui.components.atoms import SkeetGroupBox, SkeetButton, SkeetTriangleButton,
 
 AUDIOCRAFT_AVAILABLE = False
 try:
-    import audiocraft
+    import importlib
+    importlib.import_module("audiocraft")
     AUDIOCRAFT_AVAILABLE = True
 except ImportError:
-    pass
+    AUDIOCRAFT_AVAILABLE = False
 
 
 class WaveformWidget(QFrame):
@@ -86,7 +87,11 @@ class AudioGenWorker(QThread):
 
     def run(self):
         try:
-            from audiocraft.models import MusicGen
+            try:
+                from audiocraft.models import MusicGen
+            except ImportError:
+                self.error.emit("ERROR: audiocraft not installed. pip install audiocraft")
+                return
             import torchaudio
             import torch
             
@@ -336,7 +341,18 @@ class AudioGenModule(QWidget):
             return
         path = os.path.abspath(path)
         try:
-            from audiocraft.models import MusicGen
+            if not AUDIOCRAFT_AVAILABLE:
+                self._set_status("ERROR: audiocraft not installed. pip install audiocraft", FG_ERROR)
+                self.inp_model_path.setText(self.model_path)
+                self.inp_model_path.setToolTip(self.model_path)
+                return
+            try:
+                from audiocraft.models import MusicGen
+            except ImportError:
+                self._set_status("ERROR: audiocraft not installed. pip install audiocraft", FG_ERROR)
+                self.inp_model_path.setText(self.model_path)
+                self.inp_model_path.setToolTip(self.model_path)
+                return
             MusicGen.get_pretrained(path)
         except Exception as exc:
             self._set_status(f"ERROR: {str(exc)}", FG_ERROR)
@@ -357,7 +373,7 @@ class AudioGenModule(QWidget):
 
     def _start_generate(self):
         if not AUDIOCRAFT_AVAILABLE:
-            self._set_status("ERROR: audiocraft not installed", FG_ERROR)
+            self._set_status("ERROR: audiocraft not installed. pip install audiocraft", FG_ERROR)
             return
             
         prompt = self.inp_prompt.text().strip()
@@ -432,7 +448,7 @@ class AudioGenModule(QWidget):
         self._set_status("PLAYING", FG_ACCENT)
 
     def _save_audio(self):
-        if not self.current_audio is not None:
+        if self.current_audio is None:
             return
         
         if not self.current_filepath or not self.current_filepath.exists():

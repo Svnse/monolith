@@ -2,11 +2,6 @@ from PySide6.QtCore import QObject, QThread, Signal
 from core.state import AppState, SystemStatus
 from ui.modules.llm_config import load_config
 
-try:
-    from llama_cpp import Llama
-except ImportError:
-    Llama = None
-
 class ModelLoader(QThread):
     trace = Signal(str)
     finished = Signal(object)
@@ -19,11 +14,13 @@ class ModelLoader(QThread):
         self.n_gpu_layers = n_gpu_layers
 
     def run(self):
-        if Llama is None:
-            self.error.emit("CRITICAL: 'llama-cpp-python' library not found.")
-            return
-
         try:
+            try:
+                from llama_cpp import Llama
+            except ImportError as exc:
+                raise RuntimeError(
+                    "llama-cpp-python is not installed. Install it to use the local LLM engine."
+                ) from exc
             self.trace.emit(f"→ init backend: {self.path}")
             llm_instance = Llama(
                 model_path=self.path,
