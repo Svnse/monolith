@@ -38,21 +38,33 @@ class MonoGuard(QObject):
             self.engine.set_model_path(path)
 
     def slot_load_model(self):
-        if self._status in (SystemStatus.RUNNING, SystemStatus.LOADING):
+        if self._status in (
+            SystemStatus.RUNNING,
+            SystemStatus.LOADING,
+            SystemStatus.UNLOADING,
+        ):
             self._pending = ("load_model", (), {})
             self._request_stop(clear_pending=False)
             return
         self.engine.load_model()
 
     def slot_unload_model(self):
-        if self._status in (SystemStatus.RUNNING, SystemStatus.LOADING):
+        if self._status in (
+            SystemStatus.RUNNING,
+            SystemStatus.LOADING,
+            SystemStatus.UNLOADING,
+        ):
             self._pending = ("unload_model", (), {})
             self._request_stop(clear_pending=False)
             return
         self.engine.unload_model()
 
     def slot_generate(self, user_input: str, config: dict | None = None):
-        if self._status in (SystemStatus.RUNNING, SystemStatus.LOADING):
+        if self._status in (
+            SystemStatus.RUNNING,
+            SystemStatus.LOADING,
+            SystemStatus.UNLOADING,
+        ):
             self._pending = ("generate", (user_input, config), {})
             self._request_stop(clear_pending=False)
             return
