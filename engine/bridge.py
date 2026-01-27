@@ -29,11 +29,13 @@ class EngineBridge(QObject):
         self._connect_gated_handlers(self._active_gid)
 
     def _disconnect_gated_handlers(self) -> None:
+        """Safely disconnect all generation-gated signal handlers."""
         connections = [
             (self.impl.sig_token, self._token_conn),
             (self.impl.sig_trace, self._trace_conn),
-            (self.impl.sig_usage, self._usage_conn),
         ]
+        if hasattr(self.impl, "sig_usage"):
+            connections.append((self.impl.sig_usage, self._usage_conn))
         if hasattr(self.impl, "sig_image"):
             connections.append((self.impl.sig_image, self._image_conn))
         for signal, conn in connections:
@@ -59,11 +61,12 @@ class EngineBridge(QObject):
             if self._active_gid == gid
             else None
         )
-        self._usage_conn = self.impl.sig_usage.connect(
-            lambda u, gid=gid: self.sig_usage.emit(u)
-            if self._active_gid == gid
-            else None
-        )
+        if hasattr(self.impl, "sig_usage"):
+            self._usage_conn = self.impl.sig_usage.connect(
+                lambda u, gid=gid: self.sig_usage.emit(u)
+                if self._active_gid == gid
+                else None
+            )
         if hasattr(self.impl, "sig_image"):
             self._image_conn = self.impl.sig_image.connect(
                 lambda image, gid=gid: self.sig_image.emit(image)
