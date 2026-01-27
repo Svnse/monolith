@@ -52,12 +52,20 @@ class SDWorker(QThread):
             device = "cuda" if torch.cuda.is_available() else "cpu"
             dtype = torch.float16 if device == "cuda" else torch.float32
             
-            pipe = StableDiffusionPipeline.from_pretrained(
-                self.model_path,
-                torch_dtype=dtype,
-                safety_checker=None,
-                requires_safety_checker=False
-            )
+            if self.model_path.endswith(".safetensors"):
+                pipe = StableDiffusionPipeline.from_single_file(
+                    self.model_path,
+                    torch_dtype=dtype,
+                    safety_checker=None,
+                    requires_safety_checker=False
+                )
+            else:
+                pipe = StableDiffusionPipeline.from_pretrained(
+                    self.model_path,
+                    torch_dtype=dtype,
+                    safety_checker=None,
+                    requires_safety_checker=False
+                )
             pipe = pipe.to(device)
             
             self.progress.emit("Generating image...")
@@ -122,7 +130,7 @@ class SDModule(QWidget):
         lbl_model.setStyleSheet(f"color: {FG_DIM}; font-size: 10px;")
         self.inp_model = QLineEdit(self.model_path)
         self.inp_model.setReadOnly(True)
-        self.inp_model.setPlaceholderText("Select a model file (.gguf or .ckpt)...")
+        self.inp_model.setPlaceholderText("Select a model file (.gguf, .ckpt, or .safetensors)...")
         self.inp_model.setToolTip(self.model_path)
         self.inp_model.setStyleSheet(f"""
             QLineEdit {{
@@ -339,7 +347,7 @@ class SDModule(QWidget):
             self,
             "Select Vision Model",
             "",
-            "Model Files (*.gguf *.ckpt);;All Files (*)"
+            "Model Files (*.gguf *.ckpt *.safetensors);;All Files (*)"
         )
         if path:
             self.inp_model.setText(path)
