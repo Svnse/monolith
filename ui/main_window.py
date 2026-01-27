@@ -150,15 +150,16 @@ class MonolithUI(QMainWindow):
         if status is None:
             status = engine_key
             engine_key = "llm"
-        if engine_key != "llm":
-            return
         if status == SystemStatus.ERROR:
             self.lbl_status.setStyleSheet(f"color: {FG_ERROR}; font-size: 10px; font-weight: bold;")
         elif status == SystemStatus.LOADING:
             self.lbl_status.setStyleSheet(f"color: {FG_WARN}; font-size: 10px; font-weight: bold;")
         else:
             self.lbl_status.setStyleSheet(f"color: {FG_ACCENT}; font-size: 10px; font-weight: bold;")
-        self.lbl_status.setText(status.value if hasattr(status, "value") else str(status))
+        status_text = status.value if hasattr(status, "value") else str(status)
+        if engine_key != "llm":
+            status_text = f"{engine_key.upper()}: {status_text}"
+        self.lbl_status.setText(status_text)
 
     def update_ctx(self, used):
         self.state.ctx_used = used
