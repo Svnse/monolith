@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Monolith specific
+ui/addons/configs/
+*.db
+*.log
+.env
+
+# Model files (optional - user downloads these)
+*.gguf
+*.safetensors
+*.ckpt
+*.pth
+
+# Generated content
+generated_images/
+generated_audio/
+chat_history/
