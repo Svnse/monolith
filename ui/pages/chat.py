@@ -15,7 +15,7 @@ from PySide6.QtGui import QTextCursor
 from PySide6.QtCore import Signal, Qt, QTimer
 
 from core.state import SystemStatus
-from core.style import BG_INPUT, FG_DIM, FG_TEXT, ACCENT_GOLD
+from core.style import BG_INPUT, FG_DIM, FG_TEXT, ACCENT_GOLD, FG_ERROR
 from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection, SkeetSlider
 from core.llm_config import DEFAULT_CONFIG, load_config, save_config
 
@@ -23,6 +23,7 @@ class PageChat(QWidget):
     sig_generate = Signal(str)
     sig_load = Signal()
     sig_unload = Signal()
+    sig_stop = Signal()
 
     def __init__(self, state):
         super().__init__()
@@ -245,17 +246,18 @@ class PageChat(QWidget):
         self.btn_send = QPushButton("SEND")
         self.btn_send.setCursor(Qt.PointingHandCursor)
         self.btn_send.setFixedWidth(80)
-        self.btn_send.setStyleSheet(f"""
+        self._btn_style_template = f"""
             QPushButton {{
                 background: {BG_INPUT}; 
-                border: 1px solid {ACCENT_GOLD}; 
-                color: {ACCENT_GOLD}; 
+                border: 1px solid {{color}}; 
+                color: {{color}}; 
                 padding: 8px; font-size: 11px; font-weight: bold; border-radius: 2px;
             }}
-            QPushButton:hover {{ background: {ACCENT_GOLD}; color: black; }}
+            QPushButton:hover {{ background: {{color}}; color: black; }}
             QPushButton:pressed {{ background: #b08d2b; }}
-        """)
-        self.btn_send.clicked.connect(self.send)
+        """
+        self._set_send_button_state(is_running=False)
+        self.btn_send.clicked.connect(self.handle_send_click)
         
         input_row.addWidget(self.input)
         input_row.addWidget(self.btn_send)
@@ -296,6 +298,7 @@ class PageChat(QWidget):
         txt = self.input.text().strip()
         if not txt:
             return
+        self._set_send_button_state(is_running=True)
         self.input.clear()
         safe_txt = html.escape(txt)
         self.chat.append(f"<span style='color:{ACCENT_GOLD}'><b>USER:</b></span> {safe_txt}")
@@ -304,6 +307,28 @@ class PageChat(QWidget):
         self._add_message("user", txt)
         self._active_assistant_index = self._add_message("assistant", "")
         self.sig_generate.emit(txt)
+
+    def handle_send_click(self):
+        if self._is_running:
+            self._set_send_button_state(is_running=True, stopping=True)
+            self.sig_stop.emit()
+            return
+        self.send()
+
+    def _set_send_button_state(self, is_running: bool, stopping: bool = False):
+        self._is_running = is_running
+        if is_running:
+            self.btn_send.setText("■")
+            self.btn_send.setStyleSheet(
+                self._btn_style_template.format(color=FG_ERROR)
+            )
+            self.btn_send.setEnabled(not stopping)
+        else:
+            self.btn_send.setText("SEND")
+            self.btn_send.setStyleSheet(
+                self._btn_style_template.format(color=ACCENT_GOLD)
+            )
+            self.btn_send.setEnabled(True)
 
     def _flush_tokens(self):
         if not self._token_buf:
@@ -427,6 +452,13 @@ class PageChat(QWidget):
             self.btn_load.setText("PROCESSING...")
         else:
             self._update_load_button_text()
+        if status == SystemStatus.RUNNING:
+            self._set_send_button_state(is_running=True)
+        elif status == SystemStatus.READY:
+            self._set_send_button_state(is_running=False)
+        elif status == SystemStatus.LOADING:
+            self._set_send_button_state(is_running=False)
+            self.btn_send.setEnabled(False)
         if status == SystemStatus.READY and not self.state.model_loaded:
             self._apply_default_limits()
         if self._last_status == SystemStatus.RUNNING and status == SystemStatus.READY:
