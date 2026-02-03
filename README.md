@@ -9,7 +9,7 @@ A local-first AI workstation for running LLMs, Stable Diffusion, and audio gener
 
 ---
 
-## 📸 Screenshots
+## Screenshots
 
 <table style="border: none;">
 <tr>
@@ -32,7 +32,7 @@ A local-first AI workstation for running LLMs, Stable Diffusion, and audio gener
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Windows
 1. Clone repo  
@@ -49,10 +49,10 @@ python main.py
 ```
 
 
-## ⚙️ Core Overview
+## Core Overview
 
 **Status**
-Early alpha. Built for personal use and active experimentation. Shared publicly for builders exploring kernel-driven local AI systems.
+Early alpha. Built for personal use and active experimentation. Shared publicly for builders & creators.
 
 **Features**
 * **Local LLM Chat:** GGUF models via llama.cpp
@@ -67,7 +67,7 @@ See [Kernel Contract (V2)](/monokernel/kernel_contract.md) for details.
 
 ---
 
-## 🖥️ Requirements
+## Requirements
 
 * **Python:** 3.10+
 * **GPU:** NVIDIA GPU with 8GB+ VRAM recommended (required for SD/Audio)
