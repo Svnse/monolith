@@ -42,6 +42,8 @@ class PageChat(QWidget):
         self._active_assistant_index = None
         self._last_status = None
         self._is_running = False
+        self._pending_update_text = None
+        self._awaiting_update_restart = False
 
         capabilities_signal = getattr(self.state, "sig_model_capabilities", None)
         if capabilities_signal is not None:
@@ -235,7 +237,8 @@ class PageChat(QWidget):
         input_row = QHBoxLayout()
         self.input = QLineEdit()
         self.input.setPlaceholderText("Enter command...")
-        self.input.returnPressed.connect(self.send)
+        self.input.returnPressed.connect(self.handle_send_click)
+        self.input.textChanged.connect(self._on_input_changed)
         self.input.setStyleSheet(f"""
             QLineEdit {{
                 background: {BG_INPUT}; color: white; border: 1px solid #333;
@@ -313,20 +316,36 @@ class PageChat(QWidget):
         self.sig_generate.emit(txt)
 
     def handle_send_click(self):
-        if self._is_running:
+        txt = self.input.text().strip()
+
+        if not self._is_running:
+            self.send()
+            return
+
+        if not txt:
             self._set_send_button_state(is_running=True, stopping=True)
             self.sig_stop.emit()
             return
-        self.send()
+
+        self._pending_update_text = txt
+        self._awaiting_update_restart = True
+        self.btn_send.setEnabled(False)
+        self.sig_stop.emit()
 
     def _set_send_button_state(self, is_running: bool, stopping: bool = False):
         self._is_running = is_running
         if is_running:
-            self.btn_send.setText("■")
+            has_input = bool(self.input.text().strip())
+            if has_input:
+                self.btn_send.setText("UPDATE")
+                color = ACCENT_GOLD
+            else:
+                self.btn_send.setText("■")
+                color = FG_ERROR
             self.btn_send.setStyleSheet(
                 self._btn_style_template.format(
                     bg=BG_INPUT,
-                    color=FG_ERROR,
+                    color=color,
                 )
             )
             self.btn_send.setEnabled(not stopping)
@@ -339,6 +358,48 @@ class PageChat(QWidget):
                 )
             )
             self.btn_send.setEnabled(True)
+
+    def _on_input_changed(self, text):
+        if not self._is_running:
+            return
+        self._set_send_button_state(is_running=True)
+
+    def _submit_update(self, update_text):
+        self._set_send_button_state(is_running=True)
+        partial = "(no output yet)"
+        if self._active_assistant_index is not None:
+            txt = self._current_session["messages"][self._active_assistant_index]["text"]
+            if txt:
+                partial = txt
+
+        original = ""
+        for msg in reversed(self._current_session["messages"]):
+            if msg["role"] == "user":
+                original = msg["text"]
+                break
+
+        injected = f"""
+You were interrupted mid-generation.
+
+Original user request:
+{original}
+
+Partial assistant output so far:
+{partial}
+
+User update:
+{update_text}
+
+Continue from the interruption point. Do not repeat earlier content.
+"""
+
+        self.input.clear()
+        safe_update = html.escape(update_text)
+        self.chat.append(
+            f"<span style='color:{ACCENT_GOLD}'><b>USER:</b></span> {safe_update}"
+        )
+        self._add_message("user", update_text)
+        self.sig_generate.emit(injected)
 
     def _flush_tokens(self):
         if not self._token_buf:
@@ -462,6 +523,14 @@ class PageChat(QWidget):
             self.btn_load.setText("PROCESSING...")
         else:
             self._update_load_button_text()
+        if status == SystemStatus.READY and self._awaiting_update_restart:
+            self._awaiting_update_restart = False
+            self.btn_send.setEnabled(True)
+
+            update_text = self._pending_update_text
+            self._pending_update_text = None
+            self._submit_update(update_text)
+            return
         if status == SystemStatus.RUNNING:
             self._set_send_button_state(is_running=True)
         elif status == SystemStatus.READY:
