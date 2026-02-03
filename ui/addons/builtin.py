@@ -28,6 +28,7 @@ def terminal_factory(ctx: AddonContext):
     w.sig_unload.connect(
         lambda: ctx.bridge.submit(ctx.bridge.wrap("terminal", "unload", "llm"))
     )
+    w.sig_stop.connect(lambda: ctx.bridge.stop("llm"))
     ctx.guard.sig_status.connect(w.update_status)
     # incoming (guard -> addon)
     ctx.guard.sig_token.connect(w.append_token)
