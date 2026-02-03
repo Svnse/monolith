@@ -247,14 +247,17 @@ class PageChat(QWidget):
         self.btn_send = QPushButton("SEND")
         self.btn_send.setCursor(Qt.PointingHandCursor)
         self.btn_send.setFixedWidth(80)
-        self._btn_style_template = f"""
+        self._btn_style_template = """
             QPushButton {{
-                background: {BG_INPUT}; 
-                border: 1px solid {{color}}; 
-                color: {{color}}; 
-                padding: 8px; font-size: 11px; font-weight: bold; border-radius: 2px;
+                background: {bg};
+                border: 1px solid {color};
+                color: {color};
+                padding: 8px;
+                font-size: 11px;
+                font-weight: bold;
+                border-radius: 2px;
             }}
-            QPushButton:hover {{ background: {{color}}; color: black; }}
+            QPushButton:hover {{ background: {color}; color: black; }}
             QPushButton:pressed {{ background: #b08d2b; }}
         """
         self._set_send_button_state(is_running=False)
@@ -321,13 +324,19 @@ class PageChat(QWidget):
         if is_running:
             self.btn_send.setText("■")
             self.btn_send.setStyleSheet(
-                self._btn_style_template.format(color=FG_ERROR)
+                self._btn_style_template.format(
+                    bg=BG_INPUT,
+                    color=FG_ERROR,
+                )
             )
             self.btn_send.setEnabled(not stopping)
         else:
             self.btn_send.setText("SEND")
             self.btn_send.setStyleSheet(
-                self._btn_style_template.format(color=ACCENT_GOLD)
+                self._btn_style_template.format(
+                    bg=BG_INPUT,
+                    color=ACCENT_GOLD,
+                )
             )
             self.btn_send.setEnabled(True)
 
