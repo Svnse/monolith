@@ -457,7 +457,6 @@ Continue from the interruption point. Do not repeat earlier content.
                     return
         self.chat.moveCursor(QTextCursor.End)
         safe_chunk = html.escape(chunk)
-        safe_chunk = safe_chunk.replace(" ", "&nbsp;")
         cursor = self.chat.textCursor()
         cursor.insertHtml(
             f"<span style='white-space: pre-wrap; color:{FG_DIM}'>{safe_chunk}</span>"
