@@ -53,11 +53,15 @@ CONFIG_PATH = Path("ui/addons/configs/llm_config.json")
 
 def load_config():
     config = DEFAULT_CONFIG.copy()
+    resave_config = False
     if CONFIG_PATH.exists():
         try:
             with CONFIG_PATH.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
                 if isinstance(data, dict):
+                    if "system_prompt" in data:
+                        data.pop("system_prompt", None)
+                        resave_config = True
                     config.update(data)
         except Exception:
             pass
@@ -66,6 +70,8 @@ def load_config():
     if not isinstance(config.get("behavior_tags"), list):
         config["behavior_tags"] = []
     config["system_prompt"] = MASTER_PROMPT
+    if resave_config:
+        save_config(config)
     return config
 
 
