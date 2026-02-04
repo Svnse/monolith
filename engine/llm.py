@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject, QThread, Signal, QTimer
 from core.state import AppState, SystemStatus
-from core.llm_config import load_config
+from core.llm_config import load_config, MASTER_PROMPT
 
 class ModelLoader(QThread):
     trace = Signal(str)
@@ -168,7 +168,7 @@ class LLMEngine(QObject):
         self.state.model_loaded = True
         self.set_status(SystemStatus.READY)
         config = load_config()
-        system_prompt = config.get("system_prompt", "You are Monolith. Be precise.")
+        system_prompt = config.get("system_prompt", MASTER_PROMPT)
         context_injection = config.get("context_injection", "")
         self.reset_conversation(system_prompt, context_injection)
         self.sig_trace.emit("→ system online")
@@ -203,7 +203,7 @@ class LLMEngine(QObject):
         config = load_config()
         self.state.ctx_limit = int(config.get("ctx_limit", self.state.ctx_limit))
         self.state.model_ctx_length = None
-        system_prompt = config.get("system_prompt", "You are Monolith. Be precise.")
+        system_prompt = config.get("system_prompt", MASTER_PROMPT)
         context_injection = config.get("context_injection", "")
         self.reset_conversation(system_prompt, context_injection)
         QTimer.singleShot(0, lambda: self.set_status(SystemStatus.READY))
@@ -235,7 +235,7 @@ class LLMEngine(QObject):
         if config is None:
             config = load_config()
 
-        system_prompt = config.get("system_prompt", "You are Monolith. Be precise.")
+        system_prompt = config.get("system_prompt", MASTER_PROMPT)
         context_injection = config.get("context_injection", "")
         temp = float(config.get("temp", 0.7))
         top_p = float(config.get("top_p", 0.9))
