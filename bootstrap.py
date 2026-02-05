@@ -12,6 +12,7 @@ from monokernel.guard import MonoGuard
 from ui.addons.builtin import build_builtin_registry
 from ui.addons.context import AddonContext
 from ui.addons.host import AddonHost
+from ui.bridge import UIBridge
 from ui.main_window import MonolithUI
 
 
@@ -26,10 +27,11 @@ def main():
     dock = MonoDock(guard)
     bridge = MonoBridge(dock)
 
-    ui = MonolithUI(state)
+    ui_bridge = UIBridge()
+    ui = MonolithUI(state, ui_bridge)
 
     registry = build_builtin_registry()
-    ctx = AddonContext(state=state, guard=guard, bridge=bridge, ui=ui, host=None)
+    ctx = AddonContext(state=state, guard=guard, bridge=bridge, ui=ui, host=None, ui_bridge=ui_bridge)
     host = AddonHost(registry, ctx)
     ui.attach_host(host)
 

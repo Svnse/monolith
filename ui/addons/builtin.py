@@ -10,7 +10,7 @@ from ui.pages.databank import PageFiles
 
 
 def terminal_factory(ctx: AddonContext):
-    w = PageChat(ctx.state)
+    w = PageChat(ctx.state, ctx.ui_bridge)
     # outgoing (addon -> bridge)
     w.sig_generate.connect(
         lambda prompt: ctx.bridge.submit(

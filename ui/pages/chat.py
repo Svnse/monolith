@@ -26,9 +26,10 @@ class PageChat(QWidget):
     sig_unload = Signal()
     sig_stop = Signal()
 
-    def __init__(self, state):
+    def __init__(self, state, ui_bridge):
         super().__init__()
         self.state = state
+        self.ui_bridge = ui_bridge
         self.config = load_config()
         self.state.gguf_path = self.config.get("gguf_path")
         self.state.ctx_limit = int(self.config.get("ctx_limit", self.state.ctx_limit))
@@ -339,6 +340,7 @@ class PageChat(QWidget):
 
         if not txt:
             self._set_send_button_state(is_running=True, stopping=True)
+            self._maybe_generate_title()
             self.sig_stop.emit()
             return
 
@@ -461,7 +463,8 @@ Continue from the interruption point. Do not repeat earlier content.
                         scroll.setValue(value)
                     return
         scroll = self.chat.verticalScrollBar()
-        at_bottom = scroll.value() >= (scroll.maximum() - 4)
+        threshold = scroll.pageStep() * 0.15
+        at_bottom = scroll.value() >= (scroll.maximum() - threshold)
         value = scroll.value()
         self.chat.moveCursor(QTextCursor.End)
         safe_chunk = html.escape(chunk)
@@ -482,8 +485,8 @@ Continue from the interruption point. Do not repeat earlier content.
         if not self._flush_timer.isActive():
             self._flush_timer.start()
 
-    def append_trace(self, html):
-        lowered = html.lower()
+    def append_trace(self, trace_msg):
+        lowered = trace_msg.lower()
         if "token" in lowered:
             state = "TOKENIZING"
         elif "inference started" in lowered:
@@ -494,7 +497,7 @@ Continue from the interruption point. Do not repeat earlier content.
             state = "COMPLETE"
         else:
             state = "GENERATING"
-        self.trace.append(state)
+        self.trace.append(f"[{state}] {trace_msg}")
 
     def clear_chat(self):
         self._set_current_session(self._create_session(), show_reset=True)
@@ -617,6 +620,7 @@ Continue from the interruption point. Do not repeat earlier content.
             self._rewrite_assistant_index = None
             if self._update_trace_state == "streaming":
                 self._finalize_update_progress()
+            self._maybe_generate_title()
         elif status == SystemStatus.LOADING:
             self._set_send_button_state(is_running=False)
             self.btn_send.setEnabled(False)
@@ -722,7 +726,7 @@ Continue from the interruption point. Do not repeat earlier content.
             "created_at": created_at,
             "updated_at": updated_at,
             "message_count": len(message_payload),
-            "token_count": int(session.get("token_count", 0)),
+            "assistant_tokens": int(session.get("assistant_tokens", 0)),
             "summary": summary
         }
         payload = {"meta": meta, "messages": message_payload}
@@ -767,7 +771,7 @@ Continue from the interruption point. Do not repeat earlier content.
             archive_path=str(archive_path),
             summary=meta.get("summary", []),
             title=meta.get("title"),
-            token_count=int(meta.get("token_count", 0))
+            assistant_tokens=int(meta.get("assistant_tokens", meta.get("token_count", 0)))
         )
         self._set_current_session(session, show_reset=False)
 
@@ -786,18 +790,18 @@ Continue from the interruption point. Do not repeat earlier content.
             tooltip = "\n".join(summary) if summary else title
             updated_at = meta.get("updated_at", "")
             message_count = meta.get("message_count", len(data.get("messages", [])))
-            token_count = int(meta.get("token_count", 0))
-            items.append((updated_at, title, message_count, token_count, str(path), tooltip))
+            assistant_tokens = int(meta.get("assistant_tokens", meta.get("token_count", 0)))
+            items.append((updated_at, title, message_count, assistant_tokens, str(path), tooltip))
         items.sort(key=lambda item: item[0], reverse=True)
-        for updated_at, title, message_count, token_count, path, tooltip in items:
+        for updated_at, title, message_count, assistant_tokens, path, tooltip in items:
             date_label = updated_at.split("T")[0] if updated_at else "Unknown date"
-            subtext = f"{date_label} • {message_count} msgs • {token_count} tokens"
+            subtext = f"{date_label} • {message_count} msgs • {assistant_tokens} assistant tokens"
             list_item = QListWidgetItem(f"{title}\n{subtext}")
             list_item.setData(Qt.UserRole, path)
             list_item.setToolTip(tooltip)
             self.archive_list.addItem(list_item)
 
-    def _create_session(self, messages=None, created_at=None, updated_at=None, archive_path=None, summary=None, title=None, token_count=0):
+    def _create_session(self, messages=None, created_at=None, updated_at=None, archive_path=None, summary=None, title=None, assistant_tokens=0):
         self._session_counter += 1
         now = self._now_iso()
         return {
@@ -808,7 +812,7 @@ Continue from the interruption point. Do not repeat earlier content.
             "archive_path": archive_path,
             "summary": summary or [],
             "title": title,
-            "token_count": int(token_count),
+            "assistant_tokens": int(assistant_tokens),
         }
 
     def _set_current_session(self, session, show_reset=False):
@@ -918,8 +922,7 @@ Continue from the interruption point. Do not repeat earlier content.
         msg["text"] += token
         msg["time"] = self._now_iso()
         self._current_session["updated_at"] = msg["time"]
-        self._current_session["token_count"] = int(self._current_session.get("token_count", 0)) + 1
-        self._maybe_generate_title()
+        self._current_session["assistant_tokens"] = int(self._current_session.get("assistant_tokens", 0)) + 1
 
 
     def _maybe_generate_title(self):
@@ -944,10 +947,9 @@ Continue from the interruption point. Do not repeat earlier content.
         return max(counts.values()) >= 3
 
     def _notify_header_update(self):
-        if hasattr(self.state, "sig_terminal_header"):
-            dt = QDateTime.currentDateTime().toString("ddd • HH:mm")
-            title = self._current_session.get("title") or self._derive_title(self._current_session.get("messages", []))
-            self.state.sig_terminal_header.emit(title, dt)
+        dt = QDateTime.currentDateTime().toString("ddd • HH:mm")
+        title = self._current_session.get("title") or self._derive_title(self._current_session.get("messages", []))
+        self.ui_bridge.sig_terminal_header.emit(title, dt)
 
     def _derive_title(self, messages):
         for msg in messages:
