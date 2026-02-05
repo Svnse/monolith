@@ -17,3 +17,46 @@ FG_ERROR = "#d44e4e"      # Error Red
 FG_WARN = "#e0b020"       # Warning Yellow
 
 ACCENT_GOLD = "#D4AF37"   # Monolith Identity Gold
+
+SCROLLBAR_STYLE = f"""
+QScrollBar:vertical {{
+    background: {BG_INPUT};
+    width: 10px;
+    margin: 0px;
+    border: 1px solid {BORDER_DARK};
+}}
+QScrollBar::handle:vertical {{
+    background: #1c1c1c;
+    min-height: 24px;
+    border: 1px solid {ACCENT_GOLD};
+    border-radius: 2px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: #252525;
+}}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {{
+    height: 0px;
+    width: 0px;
+}}
+QScrollBar:horizontal {{
+    background: {BG_INPUT};
+    height: 10px;
+    margin: 0px;
+    border: 1px solid {BORDER_DARK};
+}}
+QScrollBar::handle:horizontal {{
+    background: #1c1c1c;
+    min-width: 24px;
+    border: 1px solid {ACCENT_GOLD};
+    border-radius: 2px;
+}}
+QScrollBar::handle:horizontal:hover {{
+    background: #252525;
+}}
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {{
+    height: 0px;
+    width: 0px;
+}}
+"""

@@ -12,13 +12,13 @@ from PySide6.QtWidgets import (
     QMessageBox, QButtonGroup
 )
 from PySide6.QtGui import QTextCursor
-from PySide6.QtCore import Signal, Qt, QTimer
+from PySide6.QtCore import Signal, Qt, QTimer, QDateTime
 
 from core.state import SystemStatus
-from core.style import BG_INPUT, FG_DIM, FG_TEXT, ACCENT_GOLD, FG_ERROR
+from core.style import BG_INPUT, FG_DIM, FG_TEXT, ACCENT_GOLD, FG_ERROR, SCROLLBAR_STYLE
 from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection, SkeetSlider
 from ui.components.complex import BehaviorTagInput
-from core.llm_config import DEFAULT_CONFIG, load_config, save_config, MASTER_PROMPT, TAG_MAP
+from core.llm_config import DEFAULT_CONFIG, load_config, save_config, MASTER_PROMPT
 
 class PageChat(QWidget):
     sig_generate = Signal(str)
@@ -40,6 +40,7 @@ class PageChat(QWidget):
         self._archive_dir.mkdir(parents=True, exist_ok=True)
         self._session_counter = 0
         self._current_session = self._create_session()
+        self._title_generated = False
         self._active_assistant_index = None
         self._rewrite_assistant_index = None
         self._assistant_block_map = {}
@@ -124,7 +125,7 @@ class PageChat(QWidget):
         self.s_ctx.valueChanged.connect(self._on_ctx_limit_changed)
         lbl_sys = QLabel("Behavior Tags")
         lbl_sys.setStyleSheet(f"color: {FG_DIM}; font-size: 11px; margin-top: 5px;")
-        self.behavior_tags = BehaviorTagInput(TAG_MAP.keys())
+        self.behavior_tags = BehaviorTagInput([])
         self.behavior_tags.tagsChanged.connect(self._on_behavior_tags_changed)
         grp_ai.add_widget(self.s_temp)
         grp_ai.add_widget(self.s_top)
@@ -178,15 +179,6 @@ class PageChat(QWidget):
         control_layout = QVBoxLayout(control_tab)
         control_layout.setSpacing(12)
 
-        session_row = QHBoxLayout()
-        self.btn_new_session = SkeetButton("NEW SESSION")
-        self.btn_new_session.clicked.connect(self._start_new_session)
-        self.btn_clear_log = SkeetButton("CLEAR LOG")
-        self.btn_clear_log.clicked.connect(self._prompt_clear_session)
-        session_row.addWidget(self.btn_new_session)
-        session_row.addWidget(self.btn_clear_log)
-        session_row.addStretch()
-        control_layout.addLayout(session_row)
         control_layout.addWidget(config_section)
         control_layout.addStretch()
 
@@ -199,10 +191,13 @@ class PageChat(QWidget):
         self.btn_save_chat.clicked.connect(self._save_chat_archive)
         self.btn_load_chat = SkeetButton("LOAD")
         self.btn_load_chat.clicked.connect(self._load_chat_archive)
+        self.btn_delete_chat = SkeetButton("DELETE")
+        self.btn_delete_chat.clicked.connect(self._delete_selected_archive)
         self.btn_clear_chat = SkeetButton("CLEAR")
-        self.btn_clear_chat.clicked.connect(self._prompt_clear_session)
+        self.btn_clear_chat.clicked.connect(lambda: self._clear_current_session(delete_archive=False))
         archive_controls.addWidget(self.btn_save_chat)
         archive_controls.addWidget(self.btn_load_chat)
+        archive_controls.addWidget(self.btn_delete_chat)
         archive_controls.addWidget(self.btn_clear_chat)
         archive_controls.addStretch()
         archive_layout.addLayout(archive_controls)
@@ -215,6 +210,7 @@ class PageChat(QWidget):
             }}
             QListWidget::item {{ padding: 6px; }}
             QListWidget::item:selected {{ background: #222; color: {ACCENT_GOLD}; }}
+            {SCROLLBAR_STYLE}
         """)
         archive_layout.addWidget(self.archive_list)
 
@@ -234,6 +230,7 @@ class PageChat(QWidget):
         self.chat.setStyleSheet(f"""
             background: {BG_INPUT}; color: #ccc; border: 1px solid #222; 
             font-family: 'Consolas', monospace; font-size: 12px;
+            {SCROLLBAR_STYLE}
         """)
         chat_layout.addWidget(self.chat)
         
@@ -284,8 +281,16 @@ class PageChat(QWidget):
         self.trace.setStyleSheet(f"""
             background: {BG_INPUT}; color: {FG_TEXT}; border: 1px solid #222; 
             font-family: 'Consolas', monospace; font-size: 10px;
+            {SCROLLBAR_STYLE}
         """)
+        self.lbl_config_update = QLabel("")
+        self.lbl_config_update.setStyleSheet(f"color: {ACCENT_GOLD}; font-size: 10px; font-weight: bold;")
+        self.lbl_config_update.hide()
+        self._config_update_fade = QTimer(self)
+        self._config_update_fade.setSingleShot(True)
+        self._config_update_fade.timeout.connect(self.lbl_config_update.hide)
         trace_group.add_widget(self.trace)
+        trace_group.add_widget(self.lbl_config_update)
 
         right_stack.addWidget(trace_group)
         right_stack.addWidget(operations_group)
@@ -317,7 +322,7 @@ class PageChat(QWidget):
             f"<span style='color:white'><b>USER:</b></span> "
             f"<span style='color:{FG_DIM}'>{safe_txt}</span>"
         )
-        self.chat.append(f"<span style='color:{ACCENT_GOLD}'><b>MONOLITH:</b></span>")
+        self.chat.append(f"<span style='color:{ACCENT_GOLD}'><b>ASSISTANT:</b></span>")
         self.chat.moveCursor(QTextCursor.End)
         self._add_message("user", txt)
         self._active_assistant_index = self._add_message("assistant", "")
@@ -446,7 +451,7 @@ Continue from the interruption point. Do not repeat earlier content.
                         end_cursor.movePosition(QTextCursor.End)
                         cursor.setPosition(end_cursor.position(), QTextCursor.KeepAnchor)
                     cursor.insertHtml(
-                        f"<span style='color:{ACCENT_GOLD}'><b>MONOLITH:</b></span> "
+                        f"<span style='color:{ACCENT_GOLD}'><b>ASSISTANT:</b></span> "
                         f"<span style='color:white'>{safe}</span>"
                     )
                     self.chat.setTextCursor(current_cursor)
@@ -455,13 +460,20 @@ Continue from the interruption point. Do not repeat earlier content.
                     else:
                         scroll.setValue(value)
                     return
+        scroll = self.chat.verticalScrollBar()
+        at_bottom = scroll.value() >= (scroll.maximum() - 4)
+        value = scroll.value()
         self.chat.moveCursor(QTextCursor.End)
         safe_chunk = html.escape(chunk)
         cursor = self.chat.textCursor()
         cursor.insertHtml(
             f"<span style='white-space: pre-wrap; color:{FG_DIM}'>{safe_chunk}</span>"
         )
-        self.chat.moveCursor(QTextCursor.End)
+        if at_bottom:
+            self.chat.moveCursor(QTextCursor.End)
+            scroll.setValue(scroll.maximum())
+        else:
+            scroll.setValue(value)
 
     def append_token(self, t):
         self._token_buf.append(t)
@@ -471,13 +483,18 @@ Continue from the interruption point. Do not repeat earlier content.
             self._flush_timer.start()
 
     def append_trace(self, html):
-        if self._update_trace_state in {"requested", "streaming"}:
-            lowered = html.lower()
-            if "inference aborted" in lowered or "inference complete" in lowered:
-                return
-        if "→" in html:
-            html = html.replace("→", f"<span style='color:{ACCENT_GOLD}'>→</span>")
-        self.trace.append(html)
+        lowered = html.lower()
+        if "token" in lowered:
+            state = "TOKENIZING"
+        elif "inference started" in lowered:
+            state = "INFERENCING"
+        elif "inference" in lowered and ("complete" in lowered or "aborted" in lowered):
+            state = "COMPLETE"
+        elif "error" in lowered:
+            state = "COMPLETE"
+        else:
+            state = "GENERATING"
+        self.trace.append(state)
 
     def clear_chat(self):
         self._set_current_session(self._create_session(), show_reset=True)
@@ -492,6 +509,11 @@ Continue from the interruption point. Do not repeat earlier content.
 
     def _save_config(self):
         save_config(self.config)
+        self._last_config_update = QDateTime.currentDateTime()
+        stamp = self._last_config_update.toString("HH:mm:ss")
+        self.lbl_config_update.setText(f"USER (UPDATED): {stamp}")
+        self.lbl_config_update.show()
+        self._config_update_fade.start(2500)
 
     def _update_config_value(self, key, value):
         self.config[key] = value
@@ -666,13 +688,26 @@ Continue from the interruption point. Do not repeat earlier content.
         self._set_current_session(self._create_session(), show_reset=True)
         self._refresh_archive_list()
 
+    def _delete_selected_archive(self):
+        item = self.archive_list.currentItem()
+        if not item:
+            return
+        archive_path = Path(item.data(Qt.UserRole))
+        try:
+            archive_path.unlink()
+        except OSError:
+            return
+        if self._current_session.get("archive_path") == str(archive_path):
+            self._set_current_session(self._create_session(), show_reset=True)
+        self._refresh_archive_list()
+
     def _save_chat_archive(self):
         session = self._current_session
         messages = session["messages"]
         now = self._now_iso()
         created_at = session.get("created_at") or now
         updated_at = now
-        title = self._derive_title(messages)
+        title = self._current_session.get("title") or self._derive_title(messages)
         summary = self._build_summary(messages)
         message_payload = []
         for idx, msg in enumerate(messages, start=1):
@@ -687,6 +722,7 @@ Continue from the interruption point. Do not repeat earlier content.
             "created_at": created_at,
             "updated_at": updated_at,
             "message_count": len(message_payload),
+            "token_count": int(session.get("token_count", 0)),
             "summary": summary
         }
         payload = {"meta": meta, "messages": message_payload}
@@ -729,7 +765,9 @@ Continue from the interruption point. Do not repeat earlier content.
             created_at=meta.get("created_at"),
             updated_at=meta.get("updated_at"),
             archive_path=str(archive_path),
-            summary=meta.get("summary", [])
+            summary=meta.get("summary", []),
+            title=meta.get("title"),
+            token_count=int(meta.get("token_count", 0))
         )
         self._set_current_session(session, show_reset=False)
 
@@ -748,17 +786,18 @@ Continue from the interruption point. Do not repeat earlier content.
             tooltip = "\n".join(summary) if summary else title
             updated_at = meta.get("updated_at", "")
             message_count = meta.get("message_count", len(data.get("messages", [])))
-            items.append((updated_at, title, message_count, str(path), tooltip))
+            token_count = int(meta.get("token_count", 0))
+            items.append((updated_at, title, message_count, token_count, str(path), tooltip))
         items.sort(key=lambda item: item[0], reverse=True)
-        for updated_at, title, message_count, path, tooltip in items:
+        for updated_at, title, message_count, token_count, path, tooltip in items:
             date_label = updated_at.split("T")[0] if updated_at else "Unknown date"
-            subtext = f"{date_label} • {message_count} msgs"
+            subtext = f"{date_label} • {message_count} msgs • {token_count} tokens"
             list_item = QListWidgetItem(f"{title}\n{subtext}")
             list_item.setData(Qt.UserRole, path)
             list_item.setToolTip(tooltip)
             self.archive_list.addItem(list_item)
 
-    def _create_session(self, messages=None, created_at=None, updated_at=None, archive_path=None, summary=None):
+    def _create_session(self, messages=None, created_at=None, updated_at=None, archive_path=None, summary=None, title=None, token_count=0):
         self._session_counter += 1
         now = self._now_iso()
         return {
@@ -767,7 +806,9 @@ Continue from the interruption point. Do not repeat earlier content.
             "updated_at": updated_at or now,
             "messages": messages or [],
             "archive_path": archive_path,
-            "summary": summary or []
+            "summary": summary or [],
+            "title": title,
+            "token_count": int(token_count),
         }
 
     def _set_current_session(self, session, show_reset=False):
@@ -775,7 +816,9 @@ Continue from the interruption point. Do not repeat earlier content.
         self._active_assistant_index = None
         self._rewrite_assistant_index = None
         self._assistant_block_map = {}
+        self._title_generated = bool(session.get("title"))
         self._render_session(session, show_reset=show_reset)
+        self._notify_header_update()
 
     def _render_session(self, session, show_reset=False):
         self.chat.clear()
@@ -793,7 +836,7 @@ Continue from the interruption point. Do not repeat earlier content.
                 )
             else:
                 self.chat.append(
-                    f"<span style='color:{ACCENT_GOLD}'><b>MONOLITH:</b></span> "
+                    f"<span style='color:{ACCENT_GOLD}'><b>ASSISTANT:</b></span> "
                     f"<span style='color:{FG_DIM}'>{safe}</span>"
                 )
                 block = self.chat.document().lastBlock().blockNumber()
@@ -801,19 +844,14 @@ Continue from the interruption point. Do not repeat earlier content.
         self.chat.moveCursor(QTextCursor.End)
 
     def _compile_behavior_prompt(self, tags):
-        lines = []
-        for tag in tags:
-            content = TAG_MAP.get(tag)
-            if content:
-                lines.append(content)
-        return "\n".join(lines).strip()
+        return "\n".join([tag.strip() for tag in tags if tag.strip()]).strip()
 
     def _apply_behavior_prompt(self, tags):
-        filtered = [tag for tag in tags if tag in TAG_MAP]
-        self.config["behavior_tags"] = filtered
-        behavior_prompt = self._compile_behavior_prompt(filtered)
+        cleaned = [tag.strip() for tag in tags if tag.strip()]
+        self.config["behavior_tags"] = cleaned
+        behavior_prompt = self._compile_behavior_prompt(cleaned)
         if behavior_prompt:
-            self.config["system_prompt"] = f"{MASTER_PROMPT}\n\n{behavior_prompt}"
+            self.config["system_prompt"] = f"{MASTER_PROMPT}\n\n[BEHAVIOR TAGS]\n{behavior_prompt}"
         else:
             self.config["system_prompt"] = MASTER_PROMPT
         self._save_config()
@@ -880,6 +918,36 @@ Continue from the interruption point. Do not repeat earlier content.
         msg["text"] += token
         msg["time"] = self._now_iso()
         self._current_session["updated_at"] = msg["time"]
+        self._current_session["token_count"] = int(self._current_session.get("token_count", 0)) + 1
+        self._maybe_generate_title()
+
+
+    def _maybe_generate_title(self):
+        if self._title_generated:
+            return
+        assistant_msgs = [m for m in self._current_session["messages"] if m.get("role") == "assistant" and m.get("text", "").strip()]
+        if len(assistant_msgs) < 2 and not self._topic_dominant():
+            return
+        title = self._derive_title(self._current_session["messages"])
+        self._current_session["title"] = title
+        self._title_generated = True
+        self._notify_header_update()
+
+    def _topic_dominant(self):
+        user_text = " ".join([m.get("text", "") for m in self._current_session["messages"] if m.get("role") == "user"])
+        words = [w.lower() for w in re.findall(r"[a-zA-Z]{4,}", user_text)]
+        if not words:
+            return False
+        counts = {}
+        for word in words:
+            counts[word] = counts.get(word, 0) + 1
+        return max(counts.values()) >= 3
+
+    def _notify_header_update(self):
+        if hasattr(self.state, "sig_terminal_header"):
+            dt = QDateTime.currentDateTime().toString("ddd • HH:mm")
+            title = self._current_session.get("title") or self._derive_title(self._current_session.get("messages", []))
+            self.state.sig_terminal_header.emit(title, dt)
 
     def _derive_title(self, messages):
         for msg in messages:
@@ -891,7 +959,7 @@ Continue from the interruption point. Do not repeat earlier content.
 
     def _build_summary(self, messages):
         summary = []
-        title = self._derive_title(messages)
+        title = self._current_session.get("title") or self._derive_title(messages)
         summary.append(f"Title: {title}")
         user_msgs = [m["text"] for m in messages if m.get("role") == "user" and m.get("text")]
         assistant_msgs = [m["text"] for m in messages if m.get("role") == "assistant" and m.get("text")]

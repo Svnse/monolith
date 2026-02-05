@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QFrame, QLabel, QStackedLayout
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QDateTime
 from PySide6.QtGui import QMouseEvent
 
 from core.state import SystemStatus, AppState
@@ -20,6 +20,7 @@ class MonolithUI(QMainWindow):
         self.state = state
         self.vitals_win = None
         self._drag_pos = None
+        self._chat_title = "Untitled Chat"
 
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -84,6 +85,7 @@ class MonolithUI(QMainWindow):
         content_layout.addLayout(self.center_vbox)
 
         root_layout.addLayout(content_layout)
+        self.state.sig_terminal_header.connect(self.update_terminal_header)
 
     def attach_host(self, host: AddonHost) -> None:
         self.host = host
@@ -164,6 +166,11 @@ class MonolithUI(QMainWindow):
     def update_ctx(self, used):
         self.state.ctx_used = used
 
+    def update_terminal_header(self, title, timestamp):
+        self._chat_title = title or "Untitled Chat"
+        self.lbl_chat_title.setText(self._chat_title)
+        self.lbl_chat_time.setText(timestamp or QDateTime.currentDateTime().toString("ddd • HH:mm"))
+
     def set_page(self, page_id):
         target = self.pages.get(page_id)
         if target:
@@ -191,6 +198,17 @@ class MonolithUI(QMainWindow):
         self.lbl_model = FlameLabel("MONOLITH")
         layout.addWidget(self.lbl_model)
         layout.addStretch()
+
+        self.lbl_chat_title = QLabel(self._chat_title)
+        self.lbl_chat_title.setStyleSheet("color: #dcdcdc; font-size: 10px; font-weight: bold;")
+        self.lbl_chat_time = QLabel(QDateTime.currentDateTime().toString("ddd • HH:mm"))
+        self.lbl_chat_time.setStyleSheet("color: #777; font-size: 10px;")
+        title_box = QVBoxLayout()
+        title_box.setContentsMargins(0, 0, 8, 0)
+        title_box.setSpacing(0)
+        title_box.addWidget(self.lbl_chat_title, alignment=Qt.AlignRight)
+        title_box.addWidget(self.lbl_chat_time, alignment=Qt.AlignRight)
+        layout.addLayout(title_box)
 
         self.win_controls = SplitControlBlock()
         self.win_controls.minClicked.connect(self.showMinimized)

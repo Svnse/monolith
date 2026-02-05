@@ -2,7 +2,7 @@ import math
 import re
 from PySide6.QtWidgets import (
     QWidget, QFrame, QLabel, QDialog, QHBoxLayout, QVBoxLayout,
-    QPushButton, QProgressBar, QGridLayout, QLineEdit, QCompleter
+    QPushButton, QProgressBar, QGridLayout, QLineEdit
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QRectF
 from PySide6.QtGui import (
@@ -278,9 +278,6 @@ class BehaviorTagInput(QFrame):
         self._input.textEdited.connect(self._on_text_edited)
         self._input.returnPressed.connect(self._commit_current_text)
         self._input.backspaceOnEmpty.connect(self._remove_last_tag)
-        completer = QCompleter(sorted(self._known_tags))
-        completer.setCaseSensitivity(Qt.CaseInsensitive)
-        self._input.setCompleter(completer)
         layout.addWidget(self._input, stretch=1)
 
     def set_tags(self, tags):
@@ -305,7 +302,7 @@ class BehaviorTagInput(QFrame):
 
     def _add_tag(self, tag, emit_signal=True):
         normalized = self._normalize_tag(tag)
-        if not normalized or normalized not in self._known_tags:
+        if not normalized:
             return
         if normalized in self._tags:
             return
