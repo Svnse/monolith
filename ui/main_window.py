@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QDateTime
 from PySide6.QtGui import QMouseEvent
 
 from core.state import SystemStatus, AppState
+from ui.bridge import UIBridge
 from core.style import BG_MAIN, BG_SIDEBAR, FG_ACCENT, FG_ERROR, FG_WARN
 from ui.addons.host import AddonHost
 from ui.components.atoms import SidebarButton, SkeetButton
@@ -15,9 +16,10 @@ from ui.components.complex import GradientLine, VitalsWindow, SplitControlBlock,
 from ui.components.module_strip import ModuleStrip
 
 class MonolithUI(QMainWindow):
-    def __init__(self, state: AppState):
+    def __init__(self, state: AppState, ui_bridge: UIBridge):
         super().__init__()
         self.state = state
+        self.ui_bridge = ui_bridge
         self.vitals_win = None
         self._drag_pos = None
         self._chat_title = "Untitled Chat"
@@ -85,7 +87,7 @@ class MonolithUI(QMainWindow):
         content_layout.addLayout(self.center_vbox)
 
         root_layout.addLayout(content_layout)
-        self.state.sig_terminal_header.connect(self.update_terminal_header)
+        self.ui_bridge.sig_terminal_header.connect(self.update_terminal_header)
 
     def attach_host(self, host: AddonHost) -> None:
         self.host = host

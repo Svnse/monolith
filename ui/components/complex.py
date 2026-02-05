@@ -255,9 +255,9 @@ class TagLineEdit(QLineEdit):
 class BehaviorTagInput(QFrame):
     tagsChanged = Signal(list)
 
-    def __init__(self, known_tags, parent=None):
+    def __init__(self, known_tags=None, parent=None):
         super().__init__(parent)
-        self._known_tags = {tag.lower() for tag in known_tags}
+        self._known_tags = {tag.lower() for tag in (known_tags or [])}
         self._tags = []
 
         self.setStyleSheet(
