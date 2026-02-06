@@ -9,8 +9,8 @@ class MonoBridge:
         self.dock = dock
 
     def wrap(self, source: str, command: str, target: str, **kwargs) -> Task:
-        payload = kwargs.pop("payload", kwargs)
         priority = int(kwargs.pop("priority", 2))
+        payload = kwargs.pop("payload", kwargs)
         return Task.new(
             addon_pid=source,
             target=target,
