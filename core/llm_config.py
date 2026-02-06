@@ -1,5 +1,6 @@
 import json
-from pathlib import Path
+
+from core.paths import CONFIG_DIR
 
 MASTER_PROMPT = """
 You are Monolith.
@@ -47,7 +48,7 @@ DEFAULT_CONFIG = {
     "behavior_tags": [],
 }
 
-CONFIG_PATH = Path("ui/addons/configs/llm_config.json")
+CONFIG_PATH = CONFIG_DIR / "llm_config.json"
 
 
 def load_config():

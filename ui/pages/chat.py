@@ -1,6 +1,5 @@
 import html
 import json
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +18,7 @@ from core.style import BG_INPUT, FG_DIM, FG_TEXT, ACCENT_GOLD, FG_ERROR, SCROLLB
 from ui.components.atoms import SkeetGroupBox, SkeetButton, CollapsibleSection, SkeetSlider
 from ui.components.complex import BehaviorTagInput
 from core.llm_config import DEFAULT_CONFIG, load_config, save_config
+from core.paths import ARCHIVE_DIR
 
 class PageChat(QWidget):
     sig_generate = Signal(str, bool)
@@ -1039,7 +1039,4 @@ Continue from the interruption point. Do not repeat earlier content.
         return datetime.now(timezone.utc).isoformat()
 
     def _get_archive_dir(self):
-        if os.name == "nt":
-            base = os.getenv("APPDATA", str(Path.home() / "AppData" / "Roaming"))
-            return Path(base) / "Monolith" / "chats"
-        return Path.home() / "Monolith" / "chats"
+        return ARCHIVE_DIR
