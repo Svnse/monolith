@@ -391,9 +391,7 @@ class PageChat(QWidget):
         self.input.clear()
         user_idx = self._add_message("user", txt)
         self._append_message_widget(user_idx)
-        self._active_assistant_index = self._add_message("assistant", "")
-        self._active_widget = self._append_message_widget(self._active_assistant_index)
-        self._sync_widget_indices()
+        self._start_assistant_stream()
         self.message_list.scrollToBottom()
         self.sig_generate.emit(txt, self._thinking_mode)
 
@@ -484,10 +482,13 @@ Continue from the interruption point. Do not repeat earlier content.
         self.input.clear()
         user_idx = self._add_message("user", update_text)
         self._append_message_widget(user_idx)
-        self._sync_widget_indices()
         self.message_list.scrollToBottom()
         self._start_update_streaming()
         self.sig_generate.emit(injected, self._thinking_mode)
+
+    def _start_assistant_stream(self):
+        self._active_assistant_index = self._add_message("assistant", "")
+        self._active_widget = self._append_message_widget(self._active_assistant_index)
 
     def _flush_tokens(self):
         if not self._token_buf:
@@ -965,7 +966,7 @@ Continue from the interruption point. Do not repeat earlier content.
         return history
 
     def _snapshot_session(self):
-        self._undo_snapshot = list(self._current_session["messages"])
+        self._undo_snapshot = [dict(m) for m in self._current_session["messages"]]
 
     def _undo_last_mutation(self):
         if not self._undo_snapshot:
@@ -1011,7 +1012,10 @@ Continue from the interruption point. Do not repeat earlier content.
 
         for m in reversed(msgs):
             if m["role"] == "user":
-                self._send_message(m["text"])
+                self._set_send_button_state(is_running=True)
+                self._start_assistant_stream()
+                self.message_list.scrollToBottom()
+                self.sig_generate.emit(m["text"], self._thinking_mode)
                 break
 
     def _render_session(self, session=None, show_reset=False):
@@ -1026,7 +1030,6 @@ Continue from the interruption point. Do not repeat earlier content.
             return
         for idx, _msg in enumerate(session["messages"]):
             self._append_message_widget(idx)
-        self._sync_widget_indices()
         self.message_list.scrollToBottom()
 
     def _append_message_widget(self, idx: int, role=None, text=None, timestamp=None):
@@ -1052,13 +1055,6 @@ Continue from the interruption point. Do not repeat earlier content.
             if isinstance(widget, MessageWidget) and getattr(widget, "_index", None) == idx:
                 return widget
         return None
-
-    def _sync_widget_indices(self):
-        for row in range(self.message_list.count()):
-            item = self.message_list.item(row)
-            widget = self.message_list.itemWidget(item)
-            if isinstance(widget, MessageWidget):
-                widget.set_index(row)
 
     def _apply_behavior_prompt(self, tags):
         cleaned = [tag.strip() for tag in tags if tag.strip()]

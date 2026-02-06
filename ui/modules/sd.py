@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -11,6 +10,7 @@ from PySide6.QtGui import QPixmap, QImage
 
 from core.style import BG_INPUT, BORDER_DARK, FG_DIM, FG_TEXT, FG_ACCENT, FG_ERROR
 from core.state import SystemStatus
+from core.paths import CONFIG_DIR, MONOLITH_ROOT
 from monokernel.bridge import MonoBridge
 from monokernel.guard import MonoGuard
 from ui.components.atoms import SkeetGroupBox, SkeetButton, SkeetTriangleButton, CollapsibleSection
@@ -21,9 +21,9 @@ class SDModule(QWidget):
         self.bridge = bridge
         self.guard = guard
 
-        self.config_path = Path("config/vision_config.json")
-        self.legacy_config_path = Path("config/sd_config.json")
-        self.artifacts_dir = Path("artifacts/vision")
+        self.config_path = CONFIG_DIR / "vision_config.json"
+        self.legacy_config_path = CONFIG_DIR / "sd_config.json"
+        self.artifacts_dir = MONOLITH_ROOT / "artifacts" / "vision"
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
         
