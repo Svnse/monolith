@@ -1,7 +1,29 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from core.style import ACCENT_GOLD, BG_INPUT, FG_DIM, FG_TEXT
+from core.style import ACCENT_GOLD, FG_DIM, FG_TEXT, BORDER_DARK
+
+
+class _IconAction(QPushButton):
+    """Tiny icon-only action button for message hover bar."""
+
+    def __init__(self, icon_char: str, tooltip: str):
+        super().__init__(icon_char)
+        self.setToolTip(tooltip)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(22, 22)
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {FG_DIM};
+                border: none;
+                font-size: 12px;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                color: {ACCENT_GOLD};
+            }}
+        """)
 
 
 class MessageWidget(QWidget):
@@ -17,64 +39,84 @@ class MessageWidget(QWidget):
 
         self.setAttribute(Qt.WA_Hover, True)
 
+        is_assistant = role == "assistant"
+        is_system = role == "system"
+        border_color = ACCENT_GOLD if is_assistant else "#1a1a1a"
+        # User messages: transparent, blend into list. Assistant: very subtle lift.
+        bg = "rgba(20, 20, 20, 180)" if is_assistant else "transparent"
+        if is_system:
+            bg = "transparent"
+            border_color = "#222"
+
+        self.setStyleSheet(f"""
+            MessageWidget {{
+                background: {bg};
+                border-left: 2px solid {border_color};
+                border-top: none; border-right: none; border-bottom: none;
+            }}
+        """)
+
         root = QVBoxLayout(self)
-        root.setContentsMargins(8, 8, 8, 8)
-        root.setSpacing(6)
+        root.setContentsMargins(10, 6, 10, 6)
+        root.setSpacing(4)
 
+        # --- Header row ---
         head = QHBoxLayout()
-        head.setSpacing(8)
+        head.setSpacing(6)
 
+        role_color = ACCENT_GOLD if is_assistant else FG_TEXT
+        if is_system:
+            role_color = FG_DIM
         self.lbl_role = QLabel((role or "").upper())
         self.lbl_role.setStyleSheet(
-            f"color: {ACCENT_GOLD if role == 'assistant' else FG_TEXT}; font-size: 10px; font-weight: bold;"
+            f"color: {role_color}; font-size: 9px; font-weight: bold; letter-spacing: 1px;"
         )
         head.addWidget(self.lbl_role)
 
         self.lbl_time = QLabel(timestamp or "")
-        self.lbl_time.setStyleSheet(f"color: {FG_DIM}; font-size: 10px;")
+        self.lbl_time.setStyleSheet(f"color: #444; font-size: 9px;")
         head.addWidget(self.lbl_time)
         head.addStretch()
 
+        # --- Hover action icons ---
         self.actions = QWidget()
+        self.actions.setStyleSheet("background: transparent;")
         actions_layout = QHBoxLayout(self.actions)
         actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(4)
+        actions_layout.setSpacing(2)
 
-        self.btn_edit = QPushButton("Edit")
-        self.btn_edit.clicked.connect(lambda: self.sig_edit.emit(self._index))
-        self.btn_edit.setVisible(role == "user")
+        if not is_system:
+            if role == "user":
+                self.btn_edit = _IconAction("✎", "Edit")
+                self.btn_edit.clicked.connect(lambda: self.sig_edit.emit(self._index))
+                actions_layout.addWidget(self.btn_edit)
 
-        self.btn_delete = QPushButton("Delete")
-        self.btn_delete.clicked.connect(lambda: self.sig_delete.emit(self._index))
+            if is_assistant:
+                self.btn_regen = _IconAction("⟲", "Regenerate")
+                self.btn_regen.clicked.connect(lambda: self.sig_regen.emit(self._index))
+                actions_layout.addWidget(self.btn_regen)
 
-        self.btn_regen = QPushButton("Regen")
-        self.btn_regen.clicked.connect(lambda: self.sig_regen.emit(self._index))
-        self.btn_regen.setVisible(role == "assistant")
-
-        btn_style = (
-            f"QPushButton {{"
-            f"background: {BG_INPUT}; color: {FG_DIM}; border: 1px solid #333;"
-            f"padding: 2px 6px; font-size: 9px; border-radius: 2px;"
-            f"}}"
-            f"QPushButton:hover {{ color: {FG_TEXT}; border: 1px solid {ACCENT_GOLD}; }}"
-        )
-        for btn in (self.btn_edit, self.btn_delete, self.btn_regen):
-            btn.setStyleSheet(btn_style)
-            actions_layout.addWidget(btn)
+            self.btn_delete = _IconAction("✕", "Delete")
+            self.btn_delete.clicked.connect(lambda: self.sig_delete.emit(self._index))
+            actions_layout.addWidget(self.btn_delete)
 
         self.actions.setVisible(False)
         head.addWidget(self.actions)
 
         root.addLayout(head)
 
+        # --- Content ---
         self.lbl_content = QLabel()
         self.lbl_content.setTextFormat(Qt.PlainText)
         self.lbl_content.setWordWrap(True)
-        self.lbl_content.setStyleSheet(f"color: {FG_DIM}; font-size: 11px;")
+        content_color = FG_TEXT if is_assistant else "#bbb"
+        if is_system:
+            content_color = FG_DIM
+        self.lbl_content.setStyleSheet(
+            f"color: {content_color}; font-size: 11px; line-height: 1.4; padding: 2px 0;"
+        )
         self.lbl_content.setText(self._content)
         root.addWidget(self.lbl_content)
-
-        self.setStyleSheet(f"MessageWidget {{ border: 1px solid #222; background: {BG_INPUT}; }}")
 
     def enterEvent(self, event):
         self.actions.setVisible(True)
